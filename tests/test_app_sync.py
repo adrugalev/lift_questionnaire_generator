@@ -247,6 +247,34 @@ def test_image_options_are_read_from_material_folder(tmp_path, monkeypatch) -> N
     assert app._image_options_for_key("finish") == {"Шлифованная нержавеющая сталь EX-HS01": image_path}
 
 
+def test_image_options_prefer_local_folder_over_fallback(tmp_path, monkeypatch) -> None:
+    local_dir = tmp_path / "local"
+    fallback_dir = tmp_path / "fallback"
+    local_dir.mkdir()
+    fallback_dir.mkdir()
+    local_path = local_dir / "EX-HS01.png"
+    fallback_path = fallback_dir / "EX-HS02.png"
+    local_path.write_bytes(b"local")
+    fallback_path.write_bytes(b"fallback")
+
+    monkeypatch.setitem(app.IMAGE_OPTION_DIRS, "finish", local_dir)
+    monkeypatch.setitem(app.FALLBACK_IMAGE_OPTION_DIRS, "finish", fallback_dir)
+
+    assert app._image_options_for_key("finish") == {"Шлифованная нержавеющая сталь EX-HS01": local_path}
+
+
+def test_image_options_use_fallback_when_local_folder_is_missing(tmp_path, monkeypatch) -> None:
+    fallback_dir = tmp_path / "fallback"
+    fallback_dir.mkdir()
+    fallback_path = fallback_dir / "EX-HS02.png"
+    fallback_path.write_bytes(b"fallback")
+
+    monkeypatch.setitem(app.IMAGE_OPTION_DIRS, "finish", tmp_path / "missing")
+    monkeypatch.setitem(app.FALLBACK_IMAGE_OPTION_DIRS, "finish", fallback_dir)
+
+    assert app._image_options_for_key("finish") == {"Шлифованная нержавеющая сталь EX-HS02": fallback_path}
+
+
 def test_cop_image_options_exclude_hx99_and_ic_card(tmp_path, monkeypatch) -> None:
     included_path = tmp_path / "EX-AC99A.png"
     hx_path = tmp_path / "EX-HX99.png"
@@ -460,8 +488,14 @@ def test_wall_finish_fields_exclude_generic_text_options_and_custom_choice(monke
     assert "rear_wall_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert "front_wall_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert "skirting_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
+    assert "cabin_door_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
+    assert "main_floor_landing_door_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
+    assert "other_floors_landing_door_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert app._select_values(FakeOptions(), "finish", "skirting_finish") == [
         "Нет",
+        "Шлифованная нержавеющая сталь EX-HS01",
+    ]
+    assert app._select_values(FakeOptions(), "finish", "other_floors_landing_door_finish") == [
         "Шлифованная нержавеющая сталь EX-HS01",
     ]
 

@@ -29,6 +29,8 @@ DEFAULT_TEMPLATE = ROOT / "templates" / "questionnaire_template.xlsx"
 MAPPING_PATH = ROOT / "data" / "excel_mapping.json"
 OPTIONS_PATH = ROOT / "data" / "options.json"
 SPEC_PARSER_REVISION = "rapidocr-table-v5-project-stamp"
+APP_DIR = Path(__file__).resolve().parent
+LOCAL_TEMPLATES = APP_DIR / "templates"
 PREVIOUS_CP_TEMPLATES = (
     Path(r"C:\Users\Drugalev\Documents\Codex\2026-05-21\senior-python-b2b-1-excel-2")
     / "elevator_cp_generator"
@@ -36,6 +38,17 @@ PREVIOUS_CP_TEMPLATES = (
 )
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 IMAGE_OPTION_DIRS = {
+    "finish": LOCAL_TEMPLATES / "Walls_photo",
+    "signal_steel_finish": LOCAL_TEMPLATES / "Walls_photo",
+    "ceiling_steel_finish": LOCAL_TEMPLATES / "Walls_photo",
+    "floor_finish": LOCAL_TEMPLATES / "Floor_photo",
+    "ceiling_type": LOCAL_TEMPLATES / "Ceiling_photo",
+    "handrail_type": LOCAL_TEMPLATES / "Handrails_photo",
+    "mirror": LOCAL_TEMPLATES / "Mirrors_photo",
+    "cop_type": LOCAL_TEMPLATES / "COPHOP_photo",
+    "lop_type": LOCAL_TEMPLATES / "LOP_photo",
+}
+FALLBACK_IMAGE_OPTION_DIRS = {
     "finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
     "signal_steel_finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
     "ceiling_steel_finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
@@ -104,6 +117,9 @@ EXCLUDED_FIELD_SELECT_OPTION_VALUES = {
     "rear_wall_finish": GENERIC_FINISH_TEXT_OPTIONS,
     "front_wall_finish": GENERIC_FINISH_TEXT_OPTIONS,
     "skirting_finish": GENERIC_FINISH_TEXT_OPTIONS,
+    "cabin_door_finish": GENERIC_FINISH_TEXT_OPTIONS,
+    "main_floor_landing_door_finish": GENERIC_FINISH_TEXT_OPTIONS,
+    "other_floors_landing_door_finish": GENERIC_FINISH_TEXT_OPTIONS,
     "handrail_finish": GENERIC_FINISH_TEXT_OPTIONS,
     "ceiling_finish": GENERIC_FINISH_TEXT_OPTIONS,
 }
@@ -130,6 +146,9 @@ SELECT_WITHOUT_CUSTOM_FIELDS = {
     "rear_wall_finish",
     "front_wall_finish",
     "skirting_finish",
+    "cabin_door_finish",
+    "main_floor_landing_door_finish",
+    "other_floors_landing_door_finish",
     "handrail_finish",
     "ceiling_finish",
 }
@@ -1888,7 +1907,7 @@ def _has_image_options(option_key: str) -> bool:
 
 
 def _image_options_for_key(option_key: str) -> dict[str, Path]:
-    folder = IMAGE_OPTION_DIRS.get(option_key)
+    folder = _image_option_dir_for_key(option_key)
     if not folder or not folder.exists():
         return {}
     files = [
@@ -1900,6 +1919,16 @@ def _image_options_for_key(option_key: str) -> dict[str, Path]:
     ]
     options = {_image_option_label(path, option_key): path for path in files}
     return dict(sorted(options.items(), key=lambda item: _natural_sort_key(item[0])))
+
+
+def _image_option_dir_for_key(option_key: str) -> Path | None:
+    folder = IMAGE_OPTION_DIRS.get(option_key)
+    if folder and folder.exists():
+        return folder
+    fallback_folder = FALLBACK_IMAGE_OPTION_DIRS.get(option_key)
+    if fallback_folder and fallback_folder.exists():
+        return fallback_folder
+    return folder
 
 
 def _matches_image_option_filter(option_key: str, path: Path) -> bool:

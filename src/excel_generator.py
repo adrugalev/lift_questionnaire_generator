@@ -26,12 +26,25 @@ class ExcelGenerationError(RuntimeError):
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+APP_ROOT = Path(__file__).resolve().parent.parent
+LOCAL_TEMPLATES = APP_ROOT / "templates"
 PREVIOUS_CP_TEMPLATES = (
     Path(r"C:\Users\Drugalev\Documents\Codex\2026-05-21\senior-python-b2b-1-excel-2")
     / "elevator_cp_generator"
     / "templates"
 )
 EXCEL_IMAGE_OPTION_DIRS = {
+    "finish": LOCAL_TEMPLATES / "Walls_photo",
+    "signal_steel_finish": LOCAL_TEMPLATES / "Walls_photo",
+    "ceiling_steel_finish": LOCAL_TEMPLATES / "Walls_photo",
+    "floor_finish": LOCAL_TEMPLATES / "Floor_photo",
+    "ceiling_type": LOCAL_TEMPLATES / "Ceiling_photo",
+    "handrail_type": LOCAL_TEMPLATES / "Handrails_photo",
+    "mirror": LOCAL_TEMPLATES / "Mirrors_photo",
+    "cop_type": LOCAL_TEMPLATES / "COPHOP_photo",
+    "lop_type": LOCAL_TEMPLATES / "LOP_photo",
+}
+FALLBACK_EXCEL_IMAGE_OPTION_DIRS = {
     "finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
     "signal_steel_finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
     "ceiling_steel_finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
@@ -755,7 +768,7 @@ def _excel_image_path_for_value(option_key: str, value: Any) -> Path | None:
 
 
 def _excel_image_files_for_key(option_key: str) -> list[Path]:
-    folder = EXCEL_IMAGE_OPTION_DIRS.get(option_key)
+    folder = _excel_image_dir_for_key(option_key)
     if not folder or not folder.exists():
         return []
     return [
@@ -766,6 +779,16 @@ def _excel_image_files_for_key(option_key: str) -> list[Path]:
         and not _is_excel_excluded_image_option(option_key, path)
         and _matches_excel_image_option_filter(option_key, path)
     ]
+
+
+def _excel_image_dir_for_key(option_key: str) -> Path | None:
+    folder = EXCEL_IMAGE_OPTION_DIRS.get(option_key)
+    if folder and folder.exists():
+        return folder
+    fallback_folder = FALLBACK_EXCEL_IMAGE_OPTION_DIRS.get(option_key)
+    if fallback_folder and fallback_folder.exists():
+        return fallback_folder
+    return folder
 
 
 def _matches_excel_image_option_filter(option_key: str, path: Path) -> bool:
