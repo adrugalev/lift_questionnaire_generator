@@ -80,6 +80,25 @@ MATERIAL_PREFIX_NAMES = [
     ("PM", "Натуральное дерево, шпон"),
     ("CG", "Стекло"),
 ]
+MATERIAL_IMAGE_SORT_PREFIXES = {
+    "HX-ES": 0,
+    "EX-HS": 0,
+    "EX-MS": 1,
+    "EX-RS": 2,
+    "EX-ES": 3,
+    "EX-TS": 4,
+    "EX-YS": 5,
+    "CG": 6,
+    "EX-DB": 7,
+    "EX-DM": 7,
+    "EX-DS": 7,
+    "EX-DA": 7,
+    "EX-DR": 7,
+    "E-": 8,
+    "TF": 9,
+    "LF": 10,
+    "PM": 11,
+}
 MATERIAL_ARTICLE_NAMES = {
     "CG-00": "Прозрачное стекло",
     "CG-04": "Цветное стекло",
@@ -1918,7 +1937,7 @@ def _image_options_for_key(option_key: str) -> dict[str, Path]:
         and _matches_image_option_filter(option_key, path)
     ]
     options = {_image_option_label(path, option_key): path for path in files}
-    return dict(sorted(options.items(), key=lambda item: _natural_sort_key(item[0])))
+    return dict(sorted(options.items(), key=lambda item: _image_option_sort_key(option_key, item[0], item[1])))
 
 
 def _image_option_dir_for_key(option_key: str) -> Path | None:
@@ -1929,6 +1948,20 @@ def _image_option_dir_for_key(option_key: str) -> Path | None:
     if fallback_folder and fallback_folder.exists():
         return fallback_folder
     return folder
+
+
+def _image_option_sort_key(option_key: str, label: str, path: Path) -> list[Any]:
+    if option_key in {"finish", "signal_steel_finish", "ceiling_steel_finish", "floor_finish"}:
+        article = _normalized_file_article(path)
+        return [_material_image_sort_group(article), *_natural_sort_key(article)]
+    return _natural_sort_key(label)
+
+
+def _material_image_sort_group(article: str) -> int:
+    for prefix, group in MATERIAL_IMAGE_SORT_PREFIXES.items():
+        if article.startswith(prefix):
+            return group
+    return 99
 
 
 def _matches_image_option_filter(option_key: str, path: Path) -> bool:

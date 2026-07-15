@@ -275,6 +275,22 @@ def test_image_options_use_fallback_when_local_folder_is_missing(tmp_path, monke
     assert app._image_options_for_key("finish") == {"Шлифованная нержавеющая сталь EX-HS02": fallback_path}
 
 
+def test_material_photo_options_put_stainless_steel_first(tmp_path, monkeypatch) -> None:
+    for filename in ("E-05.png", "CG-00.png", "EX-MS01.png", "EX-HS01.png", "EX-RS01.png"):
+        (tmp_path / filename).write_bytes(b"fake")
+
+    monkeypatch.setitem(app.IMAGE_OPTION_DIRS, "finish", tmp_path)
+    monkeypatch.setitem(app.FALLBACK_IMAGE_OPTION_DIRS, "finish", tmp_path / "missing")
+
+    assert list(app._image_options_for_key("finish")) == [
+        "Шлифованная нержавеющая сталь EX-HS01",
+        "Зеркальная нержавеющая сталь EX-MS01",
+        "Матовая нержавеющая сталь EX-RS01",
+        "Прозрачное стекло CG-00",
+        "Покрытие под дерево E-05",
+    ]
+
+
 def test_cop_image_options_exclude_hx99_and_ic_card(tmp_path, monkeypatch) -> None:
     included_path = tmp_path / "EX-AC99A.png"
     hx_path = tmp_path / "EX-HX99.png"
