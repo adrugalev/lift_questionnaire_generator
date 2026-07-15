@@ -923,6 +923,17 @@ def test_stops_update_button_marking_with_underground_floors(monkeypatch) -> Non
     assert session_state["group_0_button_marking"] == "-2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"
 
 
+def test_parse_number_ignores_empty_none_values(monkeypatch) -> None:
+    warnings: list[str] = []
+    monkeypatch.setattr(app.st, "warning", warnings.append)
+
+    assert app._parse_number(None, "group_0_stops") is None
+    assert app._parse_number("None", "group_0_stops") is None
+    assert app._parse_number("null", "group_0_stops") is None
+
+    assert warnings == []
+
+
 def test_stops_do_not_overwrite_doors_for_through_cabin(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_drafts": [{

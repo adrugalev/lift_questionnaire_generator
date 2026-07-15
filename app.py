@@ -2283,8 +2283,12 @@ def _format_decimal_option(value: Any) -> str:
     return f"{number:g}"
 
 
-def _parse_number(value: str, key: str) -> int | float | None:
-    value = value.strip().replace(",", ".")
+def _parse_number(value: Any, key: str) -> int | float | None:
+    if value is None:
+        return None
+    value = str(value).strip().replace(",", ".")
+    if value.casefold() in {"none", "null", "nan"}:
+        return None
     if not value:
         return None
     parser = NUMERIC_FIELDS.get(key.rsplit("_", 1)[-1])
