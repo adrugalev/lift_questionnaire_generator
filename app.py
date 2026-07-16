@@ -1424,8 +1424,10 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
         active_section_key = f"group_{index}_active_section"
         stored_section = _normalize_group_section_name(st.session_state.get(active_section_key)) or section_names[0]
         st.session_state[active_section_key] = stored_section
+        selected_additional_options_count = _selected_additional_options_count(group)
         section_widget_key = (
-            f"{active_section_key}_widget_{int(st.session_state.group_section_widget_revision)}"
+            f"{active_section_key}_widget_{int(st.session_state.group_section_widget_revision)}_"
+            f"{selected_additional_options_count}"
         )
         widget_section = _normalize_group_section_name(st.session_state.get(section_widget_key))
         if widget_section is None:
@@ -1438,7 +1440,7 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             horizontal=True,
             label_visibility="collapsed",
             key=section_widget_key,
-            format_func=lambda name: _section_display_label(name, completed_sections),
+            format_func=lambda name: _section_display_label(name, completed_sections, group),
         )
         section = _normalize_group_section_name(section) or section_names[0]
         st.session_state[active_section_key] = section
@@ -1633,7 +1635,7 @@ def _refresh_group_section_widgets() -> None:
     revision = int(st.session_state.get("group_section_widget_revision", 0)) + 1
     st.session_state.group_section_widget_revision = revision
     for key in list(st.session_state.keys()):
-        if re.fullmatch(r"group_\d+_active_section_widget_\d+", str(key)):
+        if re.fullmatch(r"group_\d+_active_section_widget_\d+(?:_\d+)?", str(key)):
             st.session_state.pop(key, None)
 
 
@@ -1764,8 +1766,19 @@ def _is_filled_value(value: Any) -> bool:
     return value not in ("", None, OTHER_OPTION)
 
 
-def _section_display_label(section: str, completed_sections: set[str]) -> str:
+def _section_display_label(
+    section: str,
+    completed_sections: set[str],
+    group: dict[str, Any] | None = None,
+) -> str:
+    if section == "Дополнительные опции":
+        return f"{section} ({_selected_additional_options_count(group or {})})"
     return f"{section} {SECTION_COMPLETE_MARK}" if section in completed_sections else section
+
+
+def _selected_additional_options_count(group: dict[str, Any]) -> int:
+    fields = (field for field, _, _, _ in FIELD_GROUPS["Дополнительные опции"])
+    return sum(1 for field in fields if _truthy_yes_no(group.get(field)))
 
 
 def _normalize_group_section_name(value: Any) -> str | None:
@@ -1774,6 +1787,7 @@ def _normalize_group_section_name(value: Any) -> str | None:
     section = str(value).strip()
     if section == "Дополнительно":
         section = "Дополнительные опции"
+    section = re.sub(r"\s+\(\d+\)$", "", section)
     if section.endswith(SECTION_COMPLETE_MARK):
         section = section[: -len(SECTION_COMPLETE_MARK)].rstrip()
     return section if section in FIELD_GROUPS else None

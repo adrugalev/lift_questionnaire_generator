@@ -1295,10 +1295,27 @@ def test_section_display_label_adds_checkmark_for_completed_section() -> None:
     assert app._section_display_label("Двери", {"Кабина"}) == "Двери"
 
 
+def test_additional_options_section_label_shows_selected_count_instead_of_checkmark() -> None:
+    group = {
+        "mgn_accessibility": "ДА",
+        "option_ard": True,
+        "option_bypass": "НЕТ",
+    }
+
+    assert app._selected_additional_options_count(group) == 2
+    assert app._section_display_label("Дополнительные опции", {"Дополнительные опции"}, group) == (
+        "Дополнительные опции (2)"
+    )
+    assert app._section_display_label("Дополнительные опции", {"Дополнительные опции"}, {}) == (
+        "Дополнительные опции (0)"
+    )
+
+
 def test_group_section_name_normalizes_dynamic_and_legacy_labels() -> None:
     assert app._normalize_group_section_name("Кабина ✅") == "Кабина"
     assert app._normalize_group_section_name("Двери ✅ ") == "Двери"
     assert app._normalize_group_section_name("Дополнительно") == "Дополнительные опции"
+    assert app._normalize_group_section_name("Дополнительные опции (3)") == "Дополнительные опции"
     assert app._normalize_group_section_name("Неизвестный раздел") is None
     assert app._normalize_group_section_name(None) is None
 
