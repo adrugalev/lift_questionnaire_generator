@@ -41,6 +41,37 @@ def test_first_group_goes_to_column_c(template_path, mapping_path):
     assert ws.freeze_panes == "C1"
 
 
+def test_door_model_is_written_inside_cabin_doors_section(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        project=ProjectInfo(project_name="Тестовый проект"),
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                door_model="Fermator Premium",
+            )
+        ],
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["A26"].value.strip() == "Двери кабины"
+    assert ws["A29"].value == "Модель дверей"
+    assert ws["B29"].value == "门机型号"
+    assert ws["C29"].value == "Fermator Premium"
+    assert ws["A30"].value == "Этажные двери"
+    assert ws["A29"].fill.fgColor.type == ws["A28"].fill.fgColor.type
+    assert ws["A29"].border.bottom.style == ws["A28"].border.bottom.style
+
+
+def test_door_model_defaults_to_nbsl_in_questionnaire(template_path, mapping_path):
+    content = generate_questionnaire_xlsx(template_path, _questionnaire(1), mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["C29"].value == "NBSL"
+
+
 def test_questionnaire_reference_header_styles_are_applied(template_path, mapping_path):
     content = generate_questionnaire_xlsx(template_path, _questionnaire(1), mapping_path)
     ws = load_workbook(BytesIO(content)).active
@@ -222,8 +253,9 @@ def test_russian_and_chinese_columns_are_not_changed(template_path, mapping_path
     after = load_workbook(BytesIO(content)).active
     labels_after = [
         (after.cell(row=row, column=1).value, after.cell(row=row, column=2).value)
-        for row in range(2, 54)
-        if str(after.cell(row=row, column=1).value or "").strip() not in factory_labels
+        for row in range(2, 55)
+        if str(after.cell(row=row, column=1).value or "").strip()
+        not in factory_labels | {"Модель дверей"}
     ]
     assert labels_after == labels_before
 
@@ -259,9 +291,9 @@ def test_questionnaire_columns_and_rows_fit_long_text(template_path, mapping_pat
     assert ws.column_dimensions["A"].width == pytest.approx(52.44140625)
     assert ws.column_dimensions["B"].width == pytest.approx(31.33203125)
     assert ws.column_dimensions["C"].width == pytest.approx(50)
-    assert ws["C37"].alignment.wrap_text
+    assert ws["C38"].alignment.wrap_text
     assert ws.row_dimensions[2].height == pytest.approx(14.4)
-    assert ws.row_dimensions[37].height == pytest.approx(28.8)
+    assert ws.row_dimensions[38].height == pytest.approx(28.8)
 
 
 def test_unselected_finishes_and_materials_are_blank_in_questionnaire(template_path, mapping_path):
@@ -298,9 +330,9 @@ def test_unselected_finishes_and_materials_are_blank_in_questionnaire(template_p
     assert ws["C23"].value is None
     assert ws["C24"].value == "Нет"
     assert ws["C28"].value is None
-    assert ws["C32"].value is None
     assert ws["C33"].value is None
-    assert ws["C37"].value is None
+    assert ws["C34"].value is None
+    assert ws["C38"].value is None
 
 
 def test_selected_finish_articles_are_written_to_questionnaire(template_path, mapping_path):
@@ -325,7 +357,7 @@ def test_selected_finish_articles_are_written_to_questionnaire(template_path, ma
     assert ws["C18"].value == "Шлифованная нержавеющая сталь EX-HS01"
     assert ws["C21"].value == "Под отделку"
     assert ws["C28"].value == "Цветное стекло CG-04"
-    assert ws["C32"].value == "Покрытие под дерево E-05"
+    assert ws["C33"].value == "Покрытие под дерево E-05"
 
 
 def test_cyrillic_finish_that_fits_one_line_keeps_single_row_height(template_path, mapping_path):
@@ -364,14 +396,14 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
 
-    assert ws["A50"].value == "Дополнительные опции"
-    assert ws["A51"].value == "Подготовка под видеонаблюдение"
-    assert ws["B51"].value == "预留视频监控接口"
-    assert ws["C51"].value == "ДА"
-    assert ws["A52"].value == "Gesture Call"
-    assert ws["B52"].value == "手势呼梯"
+    assert ws["A51"].value == "Дополнительные опции"
+    assert ws["A52"].value == "Подготовка под видеонаблюдение"
+    assert ws["B52"].value == "预留视频监控接口"
     assert ws["C52"].value == "ДА"
-    assert ws["A53"].value == "Доступность МГН"
+    assert ws["A53"].value == "Gesture Call"
+    assert ws["B53"].value == "手势呼梯"
+    assert ws["C53"].value == "ДА"
+    assert ws["A54"].value == "Доступность МГН"
 
 
 def test_factory_rows_use_reference_format_and_clear_blank_tail(template_path, mapping_path):

@@ -484,6 +484,23 @@ def test_door_opening_options_exclude_swing_and_custom_choice(monkeypatch) -> No
     assert "door_opening_type" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
 
 
+def test_door_model_options_are_strict_and_have_no_custom_choice(monkeypatch) -> None:
+    class FakeOptions:
+        def get(self, option_key: str) -> list[str]:
+            return ["NBSL", "Fermator", "Fermator Premium"]
+
+    monkeypatch.setattr(app, "_image_options_for_key", lambda option_key: {})
+
+    assert app._select_values(FakeOptions(), "door_model") == [
+        "NBSL",
+        "Fermator",
+        "Fermator Premium",
+    ]
+    assert "door_model" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
+    assert "door_model" in app.STRICT_SELECT_OPTION_KEYS
+    assert "door_model" in app.SELECT_WITHOUT_EMPTY_FIELDS
+
+
 def test_group_operation_has_no_custom_choice(monkeypatch) -> None:
     class FakeOptions:
         def get(self, option_key: str) -> list[str]:
@@ -1220,6 +1237,28 @@ def test_group_defaults_keep_existing_fire_resistance(monkeypatch) -> None:
     assert app._group_defaults(0)["fire_resistance"] == "EI-90"
 
 
+def test_group_defaults_use_nbsl_door_model(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{}],
+    })
+
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._group_defaults(0)["door_model"] == app.DEFAULT_DOOR_MODEL == "NBSL"
+
+
+def test_group_defaults_keep_existing_door_model(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{"door_model": "Fermator Premium"}],
+        "group_drafts": [{}],
+    })
+
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._group_defaults(0)["door_model"] == "Fermator Premium"
+
+
 def test_group_defaults_normalize_old_no_seismic(monkeypatch) -> None:
     session_state = FakeSessionState({
         "prefill_groups": [{"seismic": "Нет"}],
@@ -1430,10 +1469,21 @@ def test_signalization_fields_are_arranged_as_device_finish_pairs() -> None:
     ]
 
 
-def test_door_fire_resistance_is_above_door_width() -> None:
+def test_door_model_and_fire_resistance_are_swapped_in_layout() -> None:
     door_fields = [field for field, _, _, _ in app.FIELD_GROUPS["Двери"]]
 
-    assert door_fields.index("fire_resistance") < door_fields.index("landing_door_width_mm")
+    upper_door_fields = [field for field in door_fields if field not in app.DOOR_FINISH_FIELDS]
+    assert upper_door_fields == [
+        "door_opening_type",
+        "door_model",
+        "landing_door_height_mm",
+        "landing_door_width_mm",
+        "firefighter_mode",
+        "fire_resistance",
+    ]
+    assert door_fields.index("door_model") < door_fields.index("landing_door_width_mm")
+    assert door_fields[-1] == "fire_resistance"
+    assert "door_model" in app.SYNCABLE_GROUP_FIELDS
 
 
 def test_additional_options_textarea_is_removed_from_additional_section() -> None:
@@ -1743,6 +1793,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
             "shaft_material": "Железобетон",
             "seismic": app.DEFAULT_SEISMIC,
             "fire_resistance": app.DEFAULT_FIRE_RESISTANCE,
+            "door_model": app.DEFAULT_DOOR_MODEL,
             "mgn_accessibility": "НЕТ",
         },
         {
@@ -1753,6 +1804,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
             "shaft_material": "Железобетон",
             "seismic": app.DEFAULT_SEISMIC,
             "fire_resistance": app.DEFAULT_FIRE_RESISTANCE,
+            "door_model": app.DEFAULT_DOOR_MODEL,
             "mgn_accessibility": "НЕТ",
         },
     ]
@@ -1768,6 +1820,8 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
     assert session_state["group_1_seismic"] == app.DEFAULT_SEISMIC
     assert session_state["group_0_fire_resistance"] == app.DEFAULT_FIRE_RESISTANCE
     assert session_state["group_1_fire_resistance"] == app.DEFAULT_FIRE_RESISTANCE
+    assert session_state["group_0_door_model"] == app.DEFAULT_DOOR_MODEL
+    assert session_state["group_1_door_model"] == app.DEFAULT_DOOR_MODEL
     assert session_state["group_0_mgn_accessibility"] is False
     assert session_state["group_1_mgn_accessibility"] is False
     assert "group_2_section" not in session_state

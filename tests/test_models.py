@@ -19,4 +19,5 @@ def test_legacy_preparer_surname_is_normalized():
 def test_lift_group_accepts_optional_empty_fields():
     group = LiftGroup(lift_name="Лифт 1")
     assert group.lift_name == "Лифт 1"
+    assert group.door_model == "NBSL"
 

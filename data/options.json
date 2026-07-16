@@ -13,6 +13,7 @@
   "ceiling_type": ["EX-J135", "EX-J136"],
   "mirror": ["Нет"],
   "door_opening_type": ["Телескопическое", "Центральное"],
+  "door_model": ["NBSL", "Fermator", "Fermator Premium"],
   "fire_resistance": ["Нет", "EI-30", "EI-60", "EI-90"],
   "yes_no": ["ДА", "НЕТ"],
   "cop_type": [],

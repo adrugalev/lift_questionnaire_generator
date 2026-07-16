@@ -164,6 +164,8 @@ QUESTIONNAIRE_FACTORY_ROW_ORDER = {
     "Количество контейнеров": 0,
     "Стоимость": 1,
 }
+QUESTIONNAIRE_DOOR_MODEL_LABEL = "Модель дверей"
+QUESTIONNAIRE_DOOR_MODEL_LABEL_ZH = "门机型号"
 QUESTIONNAIRE_SECTION_TITLES = {
     "Кабина",
     "Двери кабины",
@@ -197,11 +199,12 @@ def generate_questionnaire_xlsx(
 
     first_group_col = int(mapping.get("first_group_column", 3))
     project_rows: dict[str, int] = mapping.get("project_fields", {})
-    group_rows: dict[str, int] = mapping["lift_group_fields"]
+    group_rows: dict[str, int] = dict(mapping["lift_group_fields"])
     group_count = len(questionnaire.lift_groups)
     if group_count == 0:
         raise ExcelGenerationError("Нужна хотя бы одна группа лифтов.")
 
+    _ensure_door_model_row(worksheet, group_rows)
     _prepare_group_columns(worksheet, first_group_col, group_count)
     additional_options_by_group, additional_options = _additional_options_by_group(questionnaire)
     if additional_options and "additional_options" in group_rows:
@@ -1070,6 +1073,31 @@ def _prepare_group_columns(worksheet: Worksheet, first_group_col: int, group_cou
             worksheet.insert_cols(column)
         if column > first_group_col + 1:
             _copy_column_style(worksheet, first_group_col, column)
+
+
+def _ensure_door_model_row(worksheet: Worksheet, group_rows: dict[str, int]) -> None:
+    if "door_model" not in group_rows:
+        return
+    row = int(group_rows["door_model"])
+    current_label = str(worksheet.cell(row=row, column=1).value or "").strip()
+    if current_label == QUESTIONNAIRE_DOOR_MODEL_LABEL:
+        return
+
+    existing_rows = [
+        current_row
+        for current_row in range(1, worksheet.max_row + 1)
+        if str(worksheet.cell(row=current_row, column=1).value or "").strip()
+        == QUESTIONNAIRE_DOOR_MODEL_LABEL
+    ]
+    if existing_rows:
+        raise ExcelGenerationError(
+            "Строка «Модель дверей» находится не на позиции, указанной в настройках Excel."
+        )
+
+    worksheet.insert_rows(row)
+    _copy_row_style(worksheet, row - 1, row)
+    worksheet.cell(row=row, column=1).value = QUESTIONNAIRE_DOOR_MODEL_LABEL
+    worksheet.cell(row=row, column=2).value = QUESTIONNAIRE_DOOR_MODEL_LABEL_ZH
 
 
 def _copy_column_style(worksheet: Worksheet, source_col: int, target_col: int) -> None:

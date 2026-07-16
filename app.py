@@ -162,6 +162,7 @@ SELECT_WITHOUT_CUSTOM_OPTION_KEYS = {
     "ceiling_type",
     "cop_type",
     "display_type",
+    "door_model",
     "door_opening_type",
     "floor_finish",
     "fire_resistance",
@@ -176,8 +177,12 @@ SELECT_WITHOUT_CUSTOM_OPTION_KEYS = {
 }
 STRICT_SELECT_OPTION_KEYS = {
     "cop_type",
+    "door_model",
     "lop_type",
     "seismic",
+}
+SELECT_WITHOUT_EMPTY_FIELDS = {
+    "door_model",
 }
 SELECT_WITHOUT_CUSTOM_FIELDS = {
     "side_wall_finish",
@@ -261,6 +266,7 @@ DEFAULT_MACHINE_ROOM = "Без машинного помещения"
 DEFAULT_SHAFT_MATERIAL = "Железобетон"
 DEFAULT_SEISMIC = "НЕТ"
 DEFAULT_FIRE_RESISTANCE = "EI-60"
+DEFAULT_DOOR_MODEL = "NBSL"
 HELPER_GROUP_FIELDS = {"underground_floors"}
 HELPER_GROUP_FIELDS.update(ADDITIONAL_OPTION_TRANSLATIONS)
 SIGNAL_FINISH_FIELDS = {
@@ -290,6 +296,7 @@ SYNCABLE_GROUP_FIELDS = {
     "skirting_finish",
     "mirror",
     "door_opening_type",
+    "door_model",
     "cabin_door_finish",
     "main_floor_landing_door_finish",
     "other_floors_landing_door_finish",
@@ -345,12 +352,13 @@ FIELD_GROUPS = {
     "Двери": [
         ("door_opening_type", "Тип открывания дверей", "select", "door_opening_type"),
         ("cabin_door_finish", "Облицовка дверей кабины", "select", "finish"),
-        ("fire_resistance", "Предел огнестойкости", "select", "fire_resistance"),
+        ("door_model", "Модель дверей", "select", "door_model"),
         ("landing_door_height_mm", "Высота дверей, мм", "number", None),
         ("main_floor_landing_door_finish", "Облицовка на основном посадочном этаже", "select", "finish"),
         ("other_floors_landing_door_finish", "Облицовка на остальных этажах", "select", "finish"),
         ("landing_door_width_mm", "Ширина дверей, мм", "number", None),
         ("firefighter_mode", "Режим перевозки пожарных подразделений", "select", "yes_no"),
+        ("fire_resistance", "Предел огнестойкости", "select", "fire_resistance"),
     ],
     "Сигнализация": [
         ("cop_type", "Панель управления кабины", "select", "cop_type"),
@@ -502,6 +510,7 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "skirting_finish": wall_finish,
             "mirror": _random_select_value(options, "mirror") or "Нет",
             "door_opening_type": random.choice(["Телескопическое", "Центральное"]),
+            "door_model": DEFAULT_DOOR_MODEL,
             "cabin_door_finish": wall_finish,
             "fire_resistance": DEFAULT_FIRE_RESISTANCE,
             "landing_door_width_mm": random.choice([800, 900, 1000, 1100]),
@@ -2027,6 +2036,7 @@ def _group_defaults(index: int) -> dict[str, Any]:
     merged["shaft_material"] = _normalize_shaft_material(merged.get("shaft_material")) or DEFAULT_SHAFT_MATERIAL
     merged["seismic"] = _normalize_seismic(merged.get("seismic")) or DEFAULT_SEISMIC
     merged.setdefault("fire_resistance", DEFAULT_FIRE_RESISTANCE)
+    merged.setdefault("door_model", DEFAULT_DOOR_MODEL)
     return merged
 
 
@@ -2147,7 +2157,9 @@ def _field_widget(
         )
         return "ДА" if checked else "НЕТ"
     if kind == "select" and option_key:
-        values = [""] + _select_values(options, option_key, field)
+        values = _select_values(options, option_key, field)
+        if field not in SELECT_WITHOUT_EMPTY_FIELDS:
+            values = [""] + values
         allows_custom = option_key not in SELECT_WITHOUT_CUSTOM_OPTION_KEYS and field not in SELECT_WITHOUT_CUSTOM_FIELDS
         if allows_custom:
             values.append(OTHER_OPTION)

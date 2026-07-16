@@ -56,6 +56,7 @@ class LiftGroup(BaseModel):
     skirting_finish: Optional[str] = None
     mirror: Optional[str] = None
     door_opening_type: Optional[str] = None
+    door_model: Optional[str] = "NBSL"
     cabin_door_finish: Optional[str] = None
     landing_door_width_mm: Optional[int] = Field(default=None, gt=0)
     landing_door_height_mm: Optional[int] = Field(default=None, gt=0)
