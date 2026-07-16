@@ -9,8 +9,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
-from openpyxl.cell.rich_text import CellRichText, TextBlock
-from openpyxl.cell.text import InlineFont
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
@@ -136,6 +134,14 @@ VISUAL_SUMMARY_GROUP_ROW_HEIGHT = 27.0
 VISUAL_SUMMARY_SECTION_ROW_HEIGHT = 19.95
 VISUAL_SUMMARY_MATERIAL_ROW_HEIGHT = 72.0
 VISUAL_SUMMARY_EQUIPMENT_ROW_HEIGHT = 118.05
+VISUAL_SUMMARY_MATERIAL_LABEL_ROW_HEIGHT = 34.5
+VISUAL_SUMMARY_MATERIAL_VALUE_ROW_HEIGHT = (
+    VISUAL_SUMMARY_MATERIAL_ROW_HEIGHT - VISUAL_SUMMARY_MATERIAL_LABEL_ROW_HEIGHT
+)
+VISUAL_SUMMARY_EQUIPMENT_LABEL_ROW_HEIGHT = 56.25
+VISUAL_SUMMARY_EQUIPMENT_VALUE_ROW_HEIGHT = (
+    VISUAL_SUMMARY_EQUIPMENT_ROW_HEIGHT - VISUAL_SUMMARY_EQUIPMENT_LABEL_ROW_HEIGHT
+)
 QUESTIONNAIRE_PROJECT_ROW_HEIGHT = 18.0
 QUESTIONNAIRE_SECTION_ROW_HEIGHT = 15.6
 QUESTIONNAIRE_FACTORY_ROW_HEIGHT = 18.0
@@ -610,84 +616,170 @@ def _write_visual_section_title(worksheet: Worksheet, row: int, title: str) -> N
 
 def _write_material_summary_rows(worksheet: Worksheet, row: int, items: list[tuple[str, str, Path]]) -> int:
     for row_start in range(0, len(items), 2):
-        worksheet.row_dimensions[row].height = VISUAL_SUMMARY_MATERIAL_ROW_HEIGHT
+        label_row = row
+        value_row = row + 1
+        worksheet.row_dimensions[label_row].height = VISUAL_SUMMARY_MATERIAL_LABEL_ROW_HEIGHT
+        worksheet.row_dimensions[value_row].height = VISUAL_SUMMARY_MATERIAL_VALUE_ROW_HEIGHT
         for item_index, (label, value, image_path) in enumerate(items[row_start : row_start + 2]):
             if item_index == 0:
                 image_col, text_start_col, text_end_col = 1, 2, 4
             else:
                 image_col, text_start_col, text_end_col = 5, 6, 8
-            _style_visual_summary_card(worksheet, row, image_col, image_col, fill_color="F8FAFC")
-            _style_visual_summary_card(worksheet, row, text_start_col, text_end_col, fill_color="F8FAFC")
-            worksheet.cell(row=row, column=text_start_col).value = _visual_summary_card_text(label, value)
+            _style_visual_summary_image_card(
+                worksheet,
+                label_row,
+                value_row,
+                image_col,
+                image_col,
+                fill_color="F8FAFC",
+            )
+            _style_visual_summary_text_card(
+                worksheet,
+                label_row,
+                value_row,
+                text_start_col,
+                text_end_col,
+                label,
+                value,
+                fill_color="F8FAFC",
+            )
             _add_summary_image(
                 worksheet,
-                row,
+                label_row,
                 image_col,
                 image_col,
                 image_path,
                 max_width=64,
                 max_height=64,
+                end_row=value_row,
             )
-        row += 1
+        row += 2
     return row
 
 
 def _write_equipment_summary_rows(worksheet: Worksheet, row: int, items: list[tuple[str, str, Path]]) -> int:
     for label, value, image_path in items:
-        worksheet.row_dimensions[row].height = VISUAL_SUMMARY_EQUIPMENT_ROW_HEIGHT
-        _style_visual_summary_card(worksheet, row, 1, 2, fill_color="F8FAFC")
-        _style_visual_summary_card(worksheet, row, 3, 8, fill_color="F8FAFC")
-        worksheet.cell(row=row, column=3).value = _visual_summary_card_text(label, value)
+        label_row = row
+        value_row = row + 1
+        worksheet.row_dimensions[label_row].height = VISUAL_SUMMARY_EQUIPMENT_LABEL_ROW_HEIGHT
+        worksheet.row_dimensions[value_row].height = VISUAL_SUMMARY_EQUIPMENT_VALUE_ROW_HEIGHT
+        _style_visual_summary_image_card(
+            worksheet,
+            label_row,
+            value_row,
+            1,
+            2,
+            fill_color="F8FAFC",
+        )
+        _style_visual_summary_text_card(
+            worksheet,
+            label_row,
+            value_row,
+            3,
+            8,
+            label,
+            value,
+            fill_color="F8FAFC",
+        )
         _add_summary_image(
             worksheet,
-            row,
+            label_row,
             1,
             2,
             image_path,
             max_width=106,
             max_height=106,
+            end_row=value_row,
         )
-        row += 1
+        row += 2
     return row
 
 
-def _visual_summary_card_text(label: str, value: str) -> CellRichText:
-    return CellRichText(
-        TextBlock(
-            InlineFont(b=True, sz=VISUAL_SUMMARY_BODY_FONT_SIZE, color="0F172A"),
-            label,
-        ),
-        "\n",
-        TextBlock(
-            InlineFont(b=False, sz=VISUAL_SUMMARY_BODY_FONT_SIZE, color="0F172A"),
-            value,
-        ),
-    )
-
-
-def _style_visual_summary_card(
+def _style_visual_summary_image_card(
     worksheet: Worksheet,
-    row: int,
+    start_row: int,
+    end_row: int,
     start_col: int,
     end_col: int,
     fill_color: str,
 ) -> None:
-    border = Border(
-        left=Side(style="thin", color="D8DEE8"),
-        right=Side(style="thin", color="D8DEE8"),
-        top=Side(style="thin", color="D8DEE8"),
-        bottom=Side(style="thin", color="D8DEE8"),
+    _style_visual_summary_card_area(
+        worksheet,
+        start_row,
+        end_row,
+        start_col,
+        end_col,
+        fill_color,
     )
+    worksheet.merge_cells(
+        start_row=start_row,
+        start_column=start_col,
+        end_row=end_row,
+        end_column=end_col,
+    )
+
+
+def _style_visual_summary_text_card(
+    worksheet: Worksheet,
+    label_row: int,
+    value_row: int,
+    start_col: int,
+    end_col: int,
+    label: str,
+    value: str,
+    fill_color: str,
+) -> None:
+    _style_visual_summary_card_area(
+        worksheet,
+        label_row,
+        value_row,
+        start_col,
+        end_col,
+        fill_color,
+    )
+    worksheet.merge_cells(
+        start_row=label_row,
+        start_column=start_col,
+        end_row=label_row,
+        end_column=end_col,
+    )
+    worksheet.merge_cells(
+        start_row=value_row,
+        start_column=start_col,
+        end_row=value_row,
+        end_column=end_col,
+    )
+    label_cell = worksheet.cell(row=label_row, column=start_col)
+    label_cell.value = label
+    label_cell.font = Font(bold=True, size=VISUAL_SUMMARY_BODY_FONT_SIZE, color="0F172A")
+    label_cell.alignment = Alignment(horizontal="left", vertical="bottom", wrap_text=True)
+    value_cell = worksheet.cell(row=value_row, column=start_col)
+    value_cell.value = value
+    value_cell.font = Font(bold=False, size=VISUAL_SUMMARY_BODY_FONT_SIZE, color="0F172A")
+    value_cell.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+
+
+def _style_visual_summary_card_area(
+    worksheet: Worksheet,
+    start_row: int,
+    end_row: int,
+    start_col: int,
+    end_col: int,
+    fill_color: str,
+) -> None:
+    border_side = Side(style="thin", color="D8DEE8")
+    no_side = Side(style=None)
     fill = PatternFill("solid", fgColor=fill_color)
-    if end_col > start_col:
-        worksheet.merge_cells(start_row=row, start_column=start_col, end_row=row, end_column=end_col)
-    for column in range(start_col, end_col + 1):
-        cell = worksheet.cell(row=row, column=column)
-        cell.border = border
-        cell.fill = fill
-        cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-        cell.font = Font(size=VISUAL_SUMMARY_BODY_FONT_SIZE, color="0F172A")
-    worksheet.cell(row=row, column=start_col).alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    for row in range(start_row, end_row + 1):
+        for column in range(start_col, end_col + 1):
+            cell = worksheet.cell(row=row, column=column)
+            cell.fill = fill
+            cell.border = Border(
+                left=border_side if column == start_col else no_side,
+                right=border_side if column == end_col else no_side,
+                top=border_side if row == start_row else no_side,
+                bottom=border_side if row == end_row else no_side,
+            )
 
 
 def _add_summary_image(
@@ -698,31 +790,41 @@ def _add_summary_image(
     image_path: Path,
     max_width: int,
     max_height: int,
+    end_row: int | None = None,
 ) -> None:
     image = ExcelImage(str(image_path))
     ratio = min(max_width / max(1, image.width), max_height / max(1, image.height))
     image.width = int(image.width * ratio)
     image.height = int(image.height * ratio)
-    image.anchor = _centered_image_anchor(worksheet, row, start_col, end_col, image.width, image.height)
+    image.anchor = _centered_image_anchor(
+        worksheet,
+        row,
+        end_row or row,
+        start_col,
+        end_col,
+        image.width,
+        image.height,
+    )
     worksheet.add_image(image)
 
 
 def _centered_image_anchor(
     worksheet: Worksheet,
-    row: int,
+    start_row: int,
+    end_row: int,
     start_col: int,
     end_col: int,
     image_width: int,
     image_height: int,
 ) -> OneCellAnchor:
     area_width = sum(_column_width_pixels(worksheet, column) for column in range(start_col, end_col + 1))
-    area_height = _row_height_pixels(worksheet, row)
+    area_height = sum(_row_height_pixels(worksheet, row) for row in range(start_row, end_row + 1))
     offset_x = max(0, int((area_width - image_width) / 2))
     offset_y = max(0, int((area_height - image_height) / 2))
     marker = AnchorMarker(
         col=start_col - 1,
         colOff=offset_x * EMU_PER_PIXEL,
-        row=row - 1,
+        row=start_row - 1,
         rowOff=offset_y * EMU_PER_PIXEL,
     )
     return OneCellAnchor(

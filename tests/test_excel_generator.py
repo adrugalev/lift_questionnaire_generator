@@ -437,11 +437,16 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert "Л1 (Секция 1, 1000 кг)" in values
     assert "Материалы отделки" in values
     assert "Оборудование" in values
-    assert "Боковые стены\nШлифованная нержавеющая сталь EX-HS01" in values
-    assert "Двери на основном посадочном этаже\nШлифованная нержавеющая сталь EX-HS01" in values
-    assert "Панель управления\nEX-AC99A" in values
-    assert "Пост вызова на основном посадочном этаже\nEX-JC99A" in values
-    assert "Посты вызовов на остальных этажах\nEX-JC99A" in values
+    assert ws["B6"].value == "Боковые стены"
+    assert ws["B7"].value == "Шлифованная нержавеющая сталь EX-HS01"
+    assert ws["F6"].value == "Двери на основном посадочном этаже"
+    assert ws["F7"].value == "Шлифованная нержавеющая сталь EX-HS01"
+    assert ws["C9"].value == "Панель управления"
+    assert ws["C10"].value == "EX-AC99A"
+    assert ws["C11"].value == "Пост вызова на основном посадочном этаже"
+    assert ws["C12"].value == "EX-JC99A"
+    assert ws["C13"].value == "Посты вызовов на остальных этажах"
+    assert ws["C14"].value == "EX-JC99A"
     assert all("ОПЭ" not in str(value) for value in values)
     assert ws["A1"].font.sz == 14
     assert ws["A1"].font.bold
@@ -454,6 +459,14 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert ws["A5"].font.sz == 12
     assert ws["A5"].font.bold
     assert ws["B6"].font.sz == 12
+    assert ws["B6"].font.bold
+    assert not ws["B7"].font.bold
+    assert ws["C9"].font.bold
+    assert not ws["C10"].font.bold
+    assert ws["C13"].font.bold
+    assert not ws["C14"].font.bold
+    assert ws["B6"].alignment.vertical == "bottom"
+    assert ws["B7"].alignment.vertical == "top"
     assert ws.column_dimensions["A"].width == pytest.approx(14)
     assert ws.column_dimensions["B"].width == pytest.approx(20)
     assert ws.column_dimensions["C"].width == pytest.approx(13)
@@ -463,8 +476,16 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert ws.row_dimensions[2].height == pytest.approx(25.95)
     assert ws.row_dimensions[4].height == pytest.approx(27)
     assert ws.row_dimensions[5].height == pytest.approx(19.95)
-    assert ws.row_dimensions[6].height == pytest.approx(72)
-    assert ws.row_dimensions[8].height == pytest.approx(118.05)
+    assert ws.row_dimensions[6].height == pytest.approx(34.5)
+    assert ws.row_dimensions[7].height == pytest.approx(37.5)
+    assert ws.row_dimensions[8].height == pytest.approx(19.95)
+    assert ws.row_dimensions[9].height == pytest.approx(56.25)
+    assert ws.row_dimensions[10].height == pytest.approx(61.8)
+    assert "B6:D6" in {str(cell_range) for cell_range in ws.merged_cells.ranges}
+    assert "B7:D7" in {str(cell_range) for cell_range in ws.merged_cells.ranges}
+    assert "A6:A7" in {str(cell_range) for cell_range in ws.merged_cells.ranges}
+    assert "C9:H9" in {str(cell_range) for cell_range in ws.merged_cells.ranges}
+    assert "C10:H10" in {str(cell_range) for cell_range in ws.merged_cells.ranges}
     assert len(ws._images) == 5
     assert questionnaire_ws.sheet_view.zoomScale == 80
     assert ws.sheet_view.zoomScale == 80
@@ -480,19 +501,6 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert "<rowOff>152400</rowOff>" in drawing_xml
     assert "<colOff>676275</colOff>" in drawing_xml
     assert "<rowOff>238125</rowOff>" in drawing_xml
-
-    rich_ws = load_workbook(BytesIO(content), rich_text=True)["Саммэри"]
-    for cell_address, expected_label in (
-        ("B6", "Боковые стены"),
-        ("C8", "Панель управления"),
-        ("C10", "Посты вызовов на остальных этажах"),
-    ):
-        rich_value = rich_ws[cell_address].value
-        assert isinstance(rich_value, excel_generator.CellRichText)
-        assert rich_value[0].text == expected_label
-        assert rich_value[0].font.b is True
-        assert rich_value[2].font.b is False
-
 
 def test_visual_summary_sheet_can_be_omitted(template_path, mapping_path, tmp_path):
     template_with_summary = tmp_path / "template_with_summary.xlsx"
