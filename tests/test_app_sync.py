@@ -1565,6 +1565,17 @@ def test_mgn_attention_warnings_are_grouped_by_lift_labels() -> None:
     assert other_warnings == []
 
 
+def test_mgn_attention_text_mentions_reason_for_one_or_multiple_groups() -> None:
+    assert app._mgn_attention_text(["Л1"]) == (
+        "Для этой группы выбрана опция «Доступность МГН», поэтому не забудьте выбрать панель управления "
+        "и вызывные посты со шрифтом Брайля."
+    )
+    assert app._mgn_attention_text(["Л1", "Л2"]) == (
+        "Для данных групп выбрана опция «Доступность МГН», поэтому не забудьте выбрать панель управления "
+        "и вызывные посты со шрифтом Брайля."
+    )
+
+
 def test_non_mgn_warnings_remain_regular_warnings() -> None:
     questionnaire = Questionnaire(lift_groups=[LiftGroup(lift_name="Л1", quantity=1)])
     warning = ValidationMessage("warning", "Группа 1", "Проверьте количество дверей.")

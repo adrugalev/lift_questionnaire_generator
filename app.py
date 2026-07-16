@@ -2714,6 +2714,7 @@ def _label_for_validation_location(location: str, questionnaire: Questionnaire) 
 
 def _render_mgn_attention_block(labels: list[str]) -> None:
     chips = "".join(f'<span class="mgn-attention-chip">{html.escape(label)}</span>' for label in labels)
+    attention_text = _mgn_attention_text(labels)
     st.markdown(
         f"""
         <div class="mgn-attention-block">
@@ -2722,10 +2723,18 @@ def _render_mgn_attention_block(labels: list[str]) -> None:
                 <span class="mgn-attention-label">Обратить внимание:</span>
                 {chips}
             </div>
-            <div class="mgn-attention-text">{html.escape(MGN_ACCESSIBILITY_WARNING)}</div>
+            <div class="mgn-attention-text">{html.escape(attention_text)}</div>
         </div>
         """,
         unsafe_allow_html=True,
+    )
+
+
+def _mgn_attention_text(labels: list[str]) -> str:
+    group_reference = "этой группы" if len(labels) == 1 else "данных групп"
+    return (
+        f"Для {group_reference} выбрана опция «Доступность МГН», поэтому не забудьте выбрать "
+        "панель управления и вызывные посты со шрифтом Брайля."
     )
 
 
