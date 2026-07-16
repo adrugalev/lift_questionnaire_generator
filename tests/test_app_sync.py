@@ -790,7 +790,9 @@ def test_lift_team_sidebar_selected_pill_uses_green_style_and_larger_gap() -> No
 
     assert "padding-top: 1.25rem;" in css
     assert 'div[data-testid="stButtonGroup"]' in css
-    assert 'button[kind="pillsActive"]' in css
+    assert 'div[data-testid="stPills"]' in css
+    assert 'section[data-testid="stSidebar"] button[kind="pillsActive"]' in css
+    assert 'button[data-testid="stBaseButton-pillsActive"]' in css
     assert "background-color: #e8f5ed !important;" in css
     assert "border: 1px solid #32a66a !important;" in css
     assert "color: #23784a !important;" in css

@@ -1139,20 +1139,20 @@ def _filled_field_styles_css() -> str:
             margin-bottom: 0;
         }
 
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] {
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"],
+        section[data-testid="stSidebar"] div[data-testid="stPills"] {
             padding-top: 1.25rem;
         }
 
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button {
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button,
+        section[data-testid="stSidebar"] div[data-testid="stPills"] button {
             font-size: 0.78rem !important;
             min-height: 2rem !important;
             padding: 0.25rem 0.65rem !important;
         }
 
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"],
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"]:hover,
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"]:focus,
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"]:focus-visible {
+        section[data-testid="stSidebar"] button[kind="pillsActive"],
+        section[data-testid="stSidebar"] button[data-testid="stBaseButton-pillsActive"] {
             background-color: #e8f5ed !important;
             border: 1px solid #32a66a !important;
             box-shadow: 0 0 0 0.15rem rgba(50, 166, 106, 0.22) !important;
@@ -1160,7 +1160,8 @@ def _filled_field_styles_css() -> str:
             outline: none !important;
         }
 
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"] p {
+        section[data-testid="stSidebar"] button[kind="pillsActive"] p,
+        section[data-testid="stSidebar"] button[data-testid="stBaseButton-pillsActive"] p {
             color: #23784a !important;
         }
 
