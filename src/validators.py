@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from .models import LiftGroup, Questionnaire
 
 
+MGN_ACCESSIBILITY_WARNING = (
+    "Для этой группы не забудьте выбрать панель управления и вызывные посты со шрифтом Брайля."
+)
+
+
 @dataclass(frozen=True)
 class ValidationMessage:
     level: str
@@ -73,15 +78,7 @@ def validate_lift_group(group: LiftGroup, index: int = 1) -> list[ValidationMess
             )
 
     if (group.mgn_accessibility or "").upper() in {"ДА", "YES"}:
-        options = (group.additional_options or "").lower()
-        if not any(word in options for word in ["мгн", "брайл", "звуков", "инвалид", "доступ"]):
-            messages.append(
-                ValidationMessage(
-                    "warning",
-                    location,
-                    "Для МГН стоит проверить наличие подходящих опций: Брайль, звуковой информатор, доступная панель.",
-                )
-            )
+        messages.append(ValidationMessage("warning", location, MGN_ACCESSIBILITY_WARNING))
 
     return messages
 

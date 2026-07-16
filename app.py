@@ -21,7 +21,7 @@ from src.file_utils import safe_filename
 from src.models import LiftGroup, ProjectInfo, Questionnaire
 from src.options_manager import OptionsManager
 from src.version import app_version_label
-from src.validators import ValidationMessage, validate_questionnaire
+from src.validators import MGN_ACCESSIBILITY_WARNING, ValidationMessage, validate_questionnaire
 
 
 ROOT = Path(__file__).resolve().parent
@@ -390,9 +390,8 @@ WALL_LINKED_FINISH_FIELDS = (
     "main_floor_lop_finish",
     "other_floors_lop_finish",
 )
-MGN_ACCESSIBILITY_WARNING = (
-    "Для МГН стоит проверить наличие подходящих опций: Брайль, звуковой информатор, доступная панель."
-)
+MGN_ACCESSIBILITY_FIELD = "mgn_accessibility"
+MGN_VOICE_OPTION_FIELD = "option_russian_voice"
 
 
 def _render_version_caption(options: OptionsManager) -> None:
@@ -2543,10 +2542,15 @@ def _save_group_custom_value(group_index: int, field: str, key: str) -> None:
 
 def _save_group_checkbox_value(group_index: int, field: str, key: str) -> None:
     draft = _ensure_group_draft(group_index)
-    if field in ADDITIONAL_OPTION_TRANSLATIONS and not st.session_state.get(key):
+    checked = bool(st.session_state.get(key))
+    if field in ADDITIONAL_OPTION_TRANSLATIONS and not checked:
         draft.pop(field, None)
         return
-    draft[field] = "ДА" if st.session_state.get(key) else "НЕТ"
+    draft[field] = "ДА" if checked else "НЕТ"
+    if field == MGN_ACCESSIBILITY_FIELD and checked:
+        voice_key = f"group_{group_index}_{MGN_VOICE_OPTION_FIELD}"
+        st.session_state[voice_key] = True
+        draft[MGN_VOICE_OPTION_FIELD] = "ДА"
 
 
 def _truthy_yes_no(value: Any) -> bool:
@@ -2767,8 +2771,14 @@ def _prepare_group_for_model(data: dict[str, Any]) -> dict[str, Any]:
     group = dict(data)
     _apply_paired_finish_fields(group, SIGNAL_FINISH_FIELDS)
     _apply_paired_finish_fields(group, CABIN_COMPONENT_FINISH_FIELDS)
+    _apply_mgn_option_dependency(group)
     _apply_additional_options(group)
     return _drop_group_helpers(group)
+
+
+def _apply_mgn_option_dependency(group: dict[str, Any]) -> None:
+    if _truthy_yes_no(group.get(MGN_ACCESSIBILITY_FIELD)):
+        group[MGN_VOICE_OPTION_FIELD] = "ДА"
 
 
 def _apply_additional_options(group: dict[str, Any]) -> None:

@@ -1371,6 +1371,26 @@ def test_collect_group_converts_mgn_checkbox_to_string(monkeypatch) -> None:
     assert session_state["group_drafts"][0]["mgn_accessibility"] == "ДА"
 
 
+def test_selecting_mgn_automatically_selects_voice_informer(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_drafts": [{}],
+        "group_0_mgn_accessibility": True,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._save_group_checkbox_value(0, "mgn_accessibility", "group_0_mgn_accessibility")
+
+    assert session_state["group_0_option_russian_voice"] is True
+    assert session_state["group_drafts"][0]["mgn_accessibility"] == "ДА"
+    assert session_state["group_drafts"][0]["option_russian_voice"] == "ДА"
+
+
+def test_mgn_voice_informer_dependency_is_applied_during_export() -> None:
+    group = app._prepare_group_for_model({"mgn_accessibility": "ДА"})
+
+    assert group["additional_options"] == app.ADDITIONAL_OPTION_TRANSLATIONS["option_russian_voice"]
+
+
 def test_checkbox_yes_no_widget_state_is_boolean() -> None:
     assert app._widget_state_value("checkbox_yes_no", "ДА") is True
     assert app._widget_state_value("checkbox_yes_no", "НЕТ") is False
