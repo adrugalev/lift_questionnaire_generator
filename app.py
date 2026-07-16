@@ -558,9 +558,8 @@ def main() -> None:
     st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
     _render_version_caption(options)
 
-    has_specification = _specification_sidebar()
+    _specification_sidebar()
     _render_project_summary_sidebar()
-    st.sidebar.caption(f"Режим: {'заполнение по ТЗ' if has_specification else 'ручное заполнение'}")
 
     project_data = _project_block()
     group_data = _groups_block(options)
@@ -1182,11 +1181,11 @@ def _render_project_summary_sidebar() -> None:
             <div class="project-summary-name">{project_name}</div>
             <div class="project-summary-metrics">
                 <div class="project-summary-metric">
-                    <span class="project-summary-metric-label">Лифтов в проекте</span>
+                    <span class="project-summary-metric-label">Лифты</span>
                     <span class="project-summary-metric-value">{summary["lift_count"]}</span>
                 </div>
                 <div class="project-summary-metric">
-                    <span class="project-summary-metric-label">Групп</span>
+                    <span class="project-summary-metric-label">Группы</span>
                     <span class="project-summary-metric-value">{summary["group_count"]}</span>
                 </div>
             </div>

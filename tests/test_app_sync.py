@@ -655,6 +655,26 @@ def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
     }
 
 
+def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
+    rendered: list[str] = []
+    monkeypatch.setattr(
+        app,
+        "_project_summary_from_state",
+        lambda: {"project_name": "Тест", "group_count": 3, "lift_count": 4},
+    )
+    monkeypatch.setattr(
+        app.st.sidebar,
+        "markdown",
+        lambda body, unsafe_allow_html: rendered.append(body),
+    )
+
+    app._render_project_summary_sidebar()
+
+    assert ">Лифты<" in rendered[0]
+    assert ">Группы<" in rendered[0]
+    assert "Лифтов в проекте" not in rendered[0]
+
+
 def test_clamp_active_group_selection_resets_old_text_label(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_count": 1,
