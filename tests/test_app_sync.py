@@ -188,6 +188,34 @@ def test_seismic_has_curated_values_and_no_custom_choice() -> None:
     assert "seismic" in app.STRICT_SELECT_OPTION_KEYS
 
 
+def test_signal_device_options_exclude_legacy_values_and_custom_choice(monkeypatch) -> None:
+    class FakeOptions:
+        def get(self, option_key: str) -> list[str]:
+            return {
+                "cop_type": [
+                    "EX-AC99А, шлифованная нержавеющая сталь EX-HS01",
+                    "EX-AC98А",
+                    "Стандартная панель",
+                ],
+                "lop_type": [
+                    "EX-JC99А, шлифованная нержавеющая сталь EX-HS01",
+                    "EX-JC99A, шлифованная нержавеющая сталь EX-HS01",
+                    "Стандартный пост вызова",
+                ],
+            }[option_key]
+
+    monkeypatch.setattr(app, "_image_options_for_key", lambda option_key: {})
+
+    assert app._select_values(FakeOptions(), "cop_type") == [
+        "EX-AC99А, шлифованная нержавеющая сталь EX-HS01",
+    ]
+    assert app._select_values(FakeOptions(), "lop_type") == [
+        "EX-JC99А, шлифованная нержавеющая сталь EX-HS01",
+    ]
+    assert {"cop_type", "lop_type"} <= app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
+    assert {"cop_type", "lop_type"} <= app.STRICT_SELECT_OPTION_KEYS
+
+
 def test_group_defaults_use_reinforced_concrete_shaft_material(monkeypatch) -> None:
     session_state = FakeSessionState({
         "prefill_groups": [{}],

@@ -125,9 +125,14 @@ MANUAL_FIELD_OPTION_VALUES = {
 }
 EXCLUDED_SELECT_OPTION_VALUES = {
     "ceiling_type": {"Стандартный"},
+    "cop_type": {"EX-AC98А", "Стандартная панель"},
     "door_opening_type": {"Распашное"},
     "floor_finish": {"EX-DB210", "ПВХ", "Керамогранит", "Рифленый алюминий"},
     "lift_type": {"Больничный"},
+    "lop_type": {
+        "EX-JC99A, шлифованная нержавеющая сталь EX-HS01",
+        "Стандартный пост вызова",
+    },
     "shaft_material": {"Монолитная", "Бетонная"},
 }
 GENERIC_FINISH_TEXT_OPTIONS = {"Зеркальная нержавеющая сталь", "Окрашенная сталь", "Ламинированная панель"}
@@ -145,6 +150,7 @@ EXCLUDED_FIELD_SELECT_OPTION_VALUES = {
 SELECT_WITHOUT_CUSTOM_OPTION_KEYS = {
     "cabin_type",
     "ceiling_type",
+    "cop_type",
     "display_type",
     "door_opening_type",
     "floor_finish",
@@ -152,12 +158,15 @@ SELECT_WITHOUT_CUSTOM_OPTION_KEYS = {
     "group_operation",
     "handrail_type",
     "lift_type",
+    "lop_type",
     "mirror",
     "seismic",
     "shaft_material",
     "yes_no",
 }
 STRICT_SELECT_OPTION_KEYS = {
+    "cop_type",
+    "lop_type",
     "seismic",
 }
 SELECT_WITHOUT_CUSTOM_FIELDS = {
