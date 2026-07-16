@@ -9,6 +9,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
@@ -87,7 +89,7 @@ EXCEL_EQUIPMENT_SUMMARY_FIELDS = [
     ("mirror", "Зеркало", "mirror"),
     ("cop_type", "Панель управления", "cop_type"),
     ("main_floor_lop_type", "Пост вызова на основном посадочном этаже", "lop_type"),
-    ("other_floors_lop_type", "Посты вызова", "lop_type"),
+    ("other_floors_lop_type", "Посты вызовов на остальных этажах", "lop_type"),
 ]
 UNSELECTED_EXCEL_VALUES = {"", "Другое", "Другое...", "Choose an option"}
 PAIRED_EXCEL_FINISH_FIELDS = {
@@ -120,7 +122,7 @@ EXCEL_ARTICLE_RE = re.compile(r"\b[A-Z]{1,3}-[A-Z]{0,4}\d+[A-Z]*\b", re.IGNORECA
 EMU_PER_PIXEL = 9525
 VISUAL_SUMMARY_BODY_FONT_SIZE = 12
 VISUAL_SUMMARY_TITLE_FONT_SIZE = 14
-VISUAL_SUMMARY_PROJECT_FONT_SIZE = 12
+VISUAL_SUMMARY_PROJECT_FONT_SIZE = 14
 VISUAL_SUMMARY_GROUP_FONT_SIZE = 14
 VISUAL_SUMMARY_SECTION_FONT_SIZE = 12
 QUESTIONNAIRE_RUSSIAN_COLUMN_WIDTH = 52.44140625
@@ -129,7 +131,7 @@ QUESTIONNAIRE_GROUP_COLUMN_WIDTH = 50
 QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT = 14.4
 QUESTIONNAIRE_WRAPPED_ROW_HEIGHT = 28.8
 VISUAL_SUMMARY_TITLE_ROW_HEIGHT = 25.95
-VISUAL_SUMMARY_HEADER_ROW_HEIGHT = 22.05
+VISUAL_SUMMARY_PROJECT_ROW_HEIGHT = 25.95
 VISUAL_SUMMARY_GROUP_ROW_HEIGHT = 27.0
 VISUAL_SUMMARY_SECTION_ROW_HEIGHT = 19.95
 VISUAL_SUMMARY_MATERIAL_ROW_HEIGHT = 72.0
@@ -583,7 +585,7 @@ def _write_visual_project_title(worksheet: Worksheet, row: int, project_name: st
     cell.value = f"Проект: {project_name}"
     cell.font = Font(bold=True, size=VISUAL_SUMMARY_PROJECT_FONT_SIZE, color="475569")
     cell.alignment = Alignment(horizontal="center", vertical="center")
-    worksheet.row_dimensions[row].height = VISUAL_SUMMARY_HEADER_ROW_HEIGHT
+    worksheet.row_dimensions[row].height = VISUAL_SUMMARY_PROJECT_ROW_HEIGHT
 
 
 def _write_visual_group_title(worksheet: Worksheet, row: int, group_index: int, group: Any) -> None:
@@ -616,7 +618,7 @@ def _write_material_summary_rows(worksheet: Worksheet, row: int, items: list[tup
                 image_col, text_start_col, text_end_col = 5, 6, 8
             _style_visual_summary_card(worksheet, row, image_col, image_col, fill_color="F8FAFC")
             _style_visual_summary_card(worksheet, row, text_start_col, text_end_col, fill_color="F8FAFC")
-            worksheet.cell(row=row, column=text_start_col).value = f"{label}\n{value}"
+            worksheet.cell(row=row, column=text_start_col).value = _visual_summary_card_text(label, value)
             _add_summary_image(
                 worksheet,
                 row,
@@ -635,7 +637,7 @@ def _write_equipment_summary_rows(worksheet: Worksheet, row: int, items: list[tu
         worksheet.row_dimensions[row].height = VISUAL_SUMMARY_EQUIPMENT_ROW_HEIGHT
         _style_visual_summary_card(worksheet, row, 1, 2, fill_color="F8FAFC")
         _style_visual_summary_card(worksheet, row, 3, 8, fill_color="F8FAFC")
-        worksheet.cell(row=row, column=3).value = f"{label}\n{value}"
+        worksheet.cell(row=row, column=3).value = _visual_summary_card_text(label, value)
         _add_summary_image(
             worksheet,
             row,
@@ -647,6 +649,20 @@ def _write_equipment_summary_rows(worksheet: Worksheet, row: int, items: list[tu
         )
         row += 1
     return row
+
+
+def _visual_summary_card_text(label: str, value: str) -> CellRichText:
+    return CellRichText(
+        TextBlock(
+            InlineFont(b=True, sz=VISUAL_SUMMARY_BODY_FONT_SIZE, color="0F172A"),
+            label,
+        ),
+        "\n",
+        TextBlock(
+            InlineFont(b=False, sz=VISUAL_SUMMARY_BODY_FONT_SIZE, color="0F172A"),
+            value,
+        ),
+    )
 
 
 def _style_visual_summary_card(

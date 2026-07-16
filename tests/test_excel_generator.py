@@ -122,6 +122,14 @@ def test_visual_summary_uses_full_control_panel_and_call_post_material_labels() 
         labels_by_field["other_floors_lop_finish"]
         == "Материал вызывных постов на остальных этажах"
     )
+    equipment_labels_by_field = {
+        field_name: label
+        for field_name, label, _ in excel_generator.EXCEL_EQUIPMENT_SUMMARY_FIELDS
+    }
+    assert (
+        equipment_labels_by_field["other_floors_lop_type"]
+        == "Посты вызовов на остальных этажах"
+    )
 
 
 def test_project_name_goes_to_header_and_sheet_title(template_path, mapping_path):
@@ -411,6 +419,7 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
                 main_floor_landing_door_finish="Шлифованная нержавеющая сталь EX-HS01",
                 cop_type="EX-AC99A",
                 main_floor_lop_type="EX-JC99A",
+                other_floors_lop_type="EX-JC99A",
             )
         ],
     )
@@ -432,10 +441,11 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert "Двери на основном посадочном этаже\nШлифованная нержавеющая сталь EX-HS01" in values
     assert "Панель управления\nEX-AC99A" in values
     assert "Пост вызова на основном посадочном этаже\nEX-JC99A" in values
+    assert "Посты вызовов на остальных этажах\nEX-JC99A" in values
     assert all("ОПЭ" not in str(value) for value in values)
     assert ws["A1"].font.sz == 14
     assert ws["A1"].font.bold
-    assert ws["A2"].font.sz == 12
+    assert ws["A2"].font.sz == 14
     assert ws["A2"].font.bold
     assert ws["A4"].font.sz == 14
     assert ws["A4"].font.bold
@@ -450,12 +460,12 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert ws.column_dimensions["F"].width == pytest.approx(20)
     assert ws.column_dimensions["G"].width == pytest.approx(13)
     assert ws.row_dimensions[1].height == pytest.approx(25.95)
-    assert ws.row_dimensions[2].height == pytest.approx(22.05)
+    assert ws.row_dimensions[2].height == pytest.approx(25.95)
     assert ws.row_dimensions[4].height == pytest.approx(27)
     assert ws.row_dimensions[5].height == pytest.approx(19.95)
     assert ws.row_dimensions[6].height == pytest.approx(72)
     assert ws.row_dimensions[8].height == pytest.approx(118.05)
-    assert len(ws._images) == 4
+    assert len(ws._images) == 5
     assert questionnaire_ws.sheet_view.zoomScale == 80
     assert ws.sheet_view.zoomScale == 80
     with ZipFile(BytesIO(content)) as archive:
@@ -470,6 +480,18 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert "<rowOff>152400</rowOff>" in drawing_xml
     assert "<colOff>676275</colOff>" in drawing_xml
     assert "<rowOff>238125</rowOff>" in drawing_xml
+
+    rich_ws = load_workbook(BytesIO(content), rich_text=True)["Саммэри"]
+    for cell_address, expected_label in (
+        ("B6", "Боковые стены"),
+        ("C8", "Панель управления"),
+        ("C10", "Посты вызовов на остальных этажах"),
+    ):
+        rich_value = rich_ws[cell_address].value
+        assert isinstance(rich_value, excel_generator.CellRichText)
+        assert rich_value[0].text == expected_label
+        assert rich_value[0].font.b is True
+        assert rich_value[2].font.b is False
 
 
 def test_visual_summary_sheet_can_be_omitted(template_path, mapping_path, tmp_path):
