@@ -194,6 +194,7 @@ def test_signal_device_options_exclude_legacy_values_and_custom_choice(monkeypat
             return {
                 "cop_type": [
                     "EX-AC99А, шлифованная нержавеющая сталь EX-HS01",
+                    "EX-AC99A, шлифованная нержавеющая сталь EX-HS01",
                     "EX-AC98А",
                     "Стандартная панель",
                 ],
@@ -206,12 +207,8 @@ def test_signal_device_options_exclude_legacy_values_and_custom_choice(monkeypat
 
     monkeypatch.setattr(app, "_image_options_for_key", lambda option_key: {})
 
-    assert app._select_values(FakeOptions(), "cop_type") == [
-        "EX-AC99А, шлифованная нержавеющая сталь EX-HS01",
-    ]
-    assert app._select_values(FakeOptions(), "lop_type") == [
-        "EX-JC99А, шлифованная нержавеющая сталь EX-HS01",
-    ]
+    assert app._select_values(FakeOptions(), "cop_type") == []
+    assert app._select_values(FakeOptions(), "lop_type") == []
     assert {"cop_type", "lop_type"} <= app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
     assert {"cop_type", "lop_type"} <= app.STRICT_SELECT_OPTION_KEYS
 
