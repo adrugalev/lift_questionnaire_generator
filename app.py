@@ -1399,11 +1399,20 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             disabled=st.session_state.group_count <= 1,
             use_container_width=True,
         ):
-            _sync_common_fields_from_selected_group(int(st.session_state.active_group_index))
+            source_index = int(st.session_state.active_group_index)
+            source_label = _group_display_label(source_index)
+            _sync_common_fields_from_selected_group(source_index)
+            st.session_state.group_sync_notice = (
+                f"Отделки и опции перенесены из группы «{source_label}» "
+                f"в остальные группы ({st.session_state.group_count - 1})."
+            )
             st.rerun()
 
     nav_groups = [_collect_group_from_state(index, _group_defaults(index)) for index in range(st.session_state.group_count)]
     _render_group_navigation(nav_groups)
+    group_sync_notice = st.session_state.pop("group_sync_notice", None)
+    if group_sync_notice:
+        st.success(group_sync_notice)
 
     groups = nav_groups
     index = int(st.session_state.active_group_index)
@@ -1836,27 +1845,31 @@ def _sync_common_fields_from_selected_group(source_index: int) -> None:
     if source_index < 0 or source_index >= st.session_state.group_count:
         return
 
-    source = _collect_group_from_state(source_index, _group_defaults(source_index))
+    active_sections = {
+        index: _normalize_group_section_name(st.session_state.get(f"group_{index}_active_section"))
+        for index in range(st.session_state.group_count)
+    }
+    groups = [
+        _collect_group_from_state(index, _group_defaults(index))
+        for index in range(st.session_state.group_count)
+    ]
+    source = dict(groups[source_index])
     for index in range(st.session_state.group_count):
         if index == source_index:
             continue
-        draft = _ensure_group_draft(index)
-        prefill = st.session_state.prefill_groups[index]
+        target = groups[index]
         for field in SYNCABLE_GROUP_FIELDS:
             value = source.get(field)
-            key = f"group_{index}_{field}"
             if value in ("", None, OTHER_OPTION):
-                draft.pop(field, None)
-                prefill.pop(field, None)
-                st.session_state.pop(f"{key}_custom", None)
-                if field in ADDITIONAL_OPTION_TRANSLATIONS:
-                    st.session_state[key] = False
-                else:
-                    st.session_state.pop(key, None)
-                continue
-            draft[field] = value
-            prefill[field] = value
-            st.session_state[key] = _widget_state_value(_field_kind(field), value)
+                target.pop(field, None)
+            else:
+                target[field] = value
+
+    st.session_state.prefill_groups = [dict(group) for group in groups]
+    _sync_group_widgets_from_group_data(groups)
+    for index, section in active_sections.items():
+        if section:
+            st.session_state[f"group_{index}_active_section"] = section
 
 
 def _field_kind(field_name: str) -> str:

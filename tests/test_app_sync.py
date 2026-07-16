@@ -77,7 +77,7 @@ def test_sync_common_fields_uses_selected_group_and_preserves_its_changes(monkey
         assert session_state[f"group_{index}_side_wall_finish"] == "Окрашенная сталь EX-YS12"
         assert session_state[f"group_{index}_floor_finish"] == "Керамогранит EX-DM138"
         assert session_state[f"group_{index}_option_ard"] is True
-        assert session_state[f"group_{index}_option_bypass"] is False
+        assert session_state.get(f"group_{index}_option_bypass") in (None, False)
         assert "option_bypass" not in session_state.prefill_groups[index]
         assert "option_bypass" not in session_state.group_drafts[index]
 
