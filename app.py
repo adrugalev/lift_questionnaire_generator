@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import hashlib
 import base64
 import html
 import random
@@ -10,12 +9,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 import streamlit as st
 from pydantic import ValidationError
 
 from src.additional_options import ADDITIONAL_OPTION_FIELDS, ADDITIONAL_OPTION_TRANSLATIONS
-from src.document_parser import parse_specification
 from src.excel_generator import ExcelGenerationError, generate_questionnaire_xlsx
 from src.file_utils import safe_filename
 from src.models import LiftGroup, ProjectInfo, Questionnaire
@@ -28,10 +25,9 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_TEMPLATE = ROOT / "templates" / "questionnaire_template.xlsx"
 MAPPING_PATH = ROOT / "data" / "excel_mapping.json"
 OPTIONS_PATH = ROOT / "data" / "options.json"
-SPEC_PARSER_REVISION = "rapidocr-table-v5-project-stamp"
 LIFT_TEAM_SURNAMES = (
     "Баранова",
-    "Другалев",
+    "Другалёв",
     "Конопельнюк",
     "Платонов",
     "Зимин",
@@ -432,7 +428,6 @@ def _apply_test_questionnaire(options: OptionsManager) -> None:
 
     st.session_state.group_count = len(groups)
     st.session_state.prefill_groups = [dict(group) for group in groups]
-    st.session_state.extracted_project_fields = set()
     st.session_state.extracted_group_fields = [set() for _ in groups]
     _sync_group_widgets_from_group_data(groups)
 
@@ -566,7 +561,6 @@ def main() -> None:
     st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
     _render_version_caption(options)
 
-    _specification_sidebar()
     _render_lift_team_sidebar()
     _render_project_summary_sidebar()
 
@@ -1142,13 +1136,32 @@ def _filled_field_styles_css() -> str:
             font-size: 1rem;
             font-weight: 700;
             line-height: 1.2;
-            margin-bottom: 0.35rem;
+            margin-bottom: 0;
         }
 
-        section[data-testid="stSidebar"] div[data-testid="stPills"] button {
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] {
+            padding-top: 1.25rem;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button {
             font-size: 0.78rem !important;
             min-height: 2rem !important;
             padding: 0.25rem 0.65rem !important;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"],
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"]:hover,
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"]:focus,
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"]:focus-visible {
+            background-color: #e8f5ed !important;
+            border: 1px solid #32a66a !important;
+            box-shadow: 0 0 0 0.15rem rgba(50, 166, 106, 0.22) !important;
+            color: #23784a !important;
+            outline: none !important;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button[kind="pillsActive"] p {
+            color: #23784a !important;
         }
 
         </style>
@@ -1160,52 +1173,9 @@ def _init_state() -> None:
     st.session_state.setdefault("prefill_groups", [{}])
     st.session_state.setdefault("group_drafts", [{}])
     st.session_state.setdefault("prefill_project", {})
-    st.session_state.setdefault("last_parse_status", None)
-    st.session_state.setdefault("last_parse_warnings", [])
-    st.session_state.setdefault("last_parse_method", None)
-    st.session_state.setdefault("last_spec_digest", None)
     st.session_state.setdefault("extracted_group_fields", [])
-    st.session_state.setdefault("extracted_project_fields", set())
     st.session_state.setdefault("active_group_index", 0)
     st.session_state.setdefault("group_section_widget_revision", 0)
-
-
-def _specification_sidebar() -> bool:
-    st.sidebar.subheader("ТЗ заказчика")
-    spec_file = st.sidebar.file_uploader("PDF/DOCX", type=["pdf", "docx", "doc"], key="spec_upload")
-    if spec_file is None:
-        return False
-
-    payload = spec_file.getvalue()
-    digest = hashlib.sha1(payload + SPEC_PARSER_REVISION.encode("utf-8")).hexdigest()
-    if digest != st.session_state.last_spec_digest:
-        with st.sidebar.status("Читаю ТЗ...", expanded=False):
-            try:
-                result = parse_specification(payload, spec_file.name)
-                _apply_parse_result(result)
-                st.session_state.last_spec_digest = digest
-                st.session_state.spec_just_parsed = True
-                st.write(f"Метод: {result.extraction_method}")
-                st.write("Данные перенесены в форму проверки.")
-            except Exception as exc:
-                st.session_state.last_spec_digest = digest
-                st.error(f"Не удалось разобрать ТЗ: {exc}")
-
-    if st.session_state.pop("spec_just_parsed", False):
-        st.rerun()
-
-    if st.session_state.last_parse_method:
-        st.sidebar.success(f"ТЗ загружено. Метод: {st.session_state.last_parse_method}")
-    for warning in st.session_state.last_parse_warnings:
-        st.sidebar.warning(warning)
-    if st.session_state.last_parse_status:
-        with st.sidebar.expander("Статус найденных полей"):
-            rows = [
-                {"Поле": key, "Статус": "найдено" if value else "не найдено"}
-                for key, value in st.session_state.last_parse_status.items()
-            ]
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
-    return True
 
 
 def _render_project_summary_sidebar() -> None:
@@ -1325,31 +1295,6 @@ def _lift_noun(quantity: int) -> str:
     if quantity % 10 in {2, 3, 4} and quantity % 100 not in {12, 13, 14}:
         return "лифта"
     return "лифтов"
-
-
-def _apply_parse_result(result) -> None:
-    st.session_state.extracted_group_fields = []
-    st.session_state.extracted_project_fields = set()
-    project_data = result.questionnaire.project.model_dump()
-    st.session_state.extracted_project_fields = {
-        field for field, value in project_data.items() if value not in ("", None)
-    }
-    for field, value in project_data.items():
-        if value not in ("", None):
-            st.session_state.prefill_project[field] = value
-            st.session_state[f"project_{field}"] = value
-    if result.questionnaire.lift_groups:
-        st.session_state.prefill_groups = [group.model_dump() for group in result.questionnaire.lift_groups]
-        st.session_state.group_drafts = [dict(group) for group in st.session_state.prefill_groups]
-        st.session_state.extracted_group_fields = [
-            {field for field, value in group.items() if value not in ("", None)}
-            for group in st.session_state.prefill_groups
-        ]
-        st.session_state.group_count = len(st.session_state.prefill_groups)
-        _sync_group_widgets_from_prefill(st.session_state.prefill_groups)
-    st.session_state.last_parse_status = result.found_fields
-    st.session_state.last_parse_warnings = result.warnings
-    st.session_state.last_parse_method = result.extraction_method
 
 
 def _sync_group_widgets_from_prefill(groups: list[dict[str, Any]]) -> None:

@@ -749,12 +749,16 @@ def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
 def test_lift_team_surnames_match_reporting_documents_directory() -> None:
     assert app.LIFT_TEAM_SURNAMES == (
         "Баранова",
-        "Другалев",
+        "Другалёв",
         "Конопельнюк",
         "Платонов",
         "Зимин",
         "Попов",
     )
+
+
+def test_customer_specification_upload_is_not_exposed() -> None:
+    assert not hasattr(app, "_specification_sidebar")
 
 
 def test_lift_team_sidebar_uses_short_preparer_label(monkeypatch) -> None:
@@ -779,6 +783,17 @@ def test_lift_team_sidebar_uses_short_preparer_label(monkeypatch) -> None:
     app._render_lift_team_sidebar()
 
     assert rendered == ['<div class="lift-team-sidebar-label">Заполняет:</div>']
+
+
+def test_lift_team_sidebar_selected_pill_uses_green_style_and_larger_gap() -> None:
+    css = app._filled_field_styles_css()
+
+    assert "padding-top: 1.25rem;" in css
+    assert 'div[data-testid="stButtonGroup"]' in css
+    assert 'button[kind="pillsActive"]' in css
+    assert "background-color: #e8f5ed !important;" in css
+    assert "border: 1px solid #32a66a !important;" in css
+    assert "color: #23784a !important;" in css
 
 
 def test_lift_summary_breakdown_aggregates_matching_specs() -> None:
@@ -924,12 +939,12 @@ def test_questionnaire_download_filename_includes_preparer_surname() -> None:
         project=ProjectInfo(
             project_name="ЖК Северный квартал",
             report_date=app.date(2026, 7, 16),
-            prepared_by="Другалев",
+            prepared_by="Другалёв",
         )
     )
 
     assert app._questionnaire_download_filename(questionnaire) == (
-        "ЖК_Северный_квартал_Другалев_16.07.2026.xlsx"
+        "ЖК_Северный_квартал_Другалёв_16.07.2026.xlsx"
     )
 
 

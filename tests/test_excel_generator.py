@@ -146,7 +146,7 @@ def test_preparer_is_written_below_project_name(template_path, mapping_path):
         project=ProjectInfo(
             project_name="Тестовый проект",
             address="г. Москва, ул. Примерная, д. 1",
-            prepared_by="Другалев",
+            prepared_by="Другалёв",
         ),
         lift_groups=[
             LiftGroup(
@@ -165,19 +165,19 @@ def test_preparer_is_written_below_project_name(template_path, mapping_path):
     assert questionnaire_ws["A1"].value == (
         "Проект: Тестовый проект\n"
         "Адрес объекта: г. Москва, ул. Примерная, д. 1\n"
-        "Заполнено: Другалев"
+        "Заполнено: Другалёв"
     )
     assert questionnaire_ws["B1"].value == (
         "项目：Тестовый проект\n"
         "项目地址：г. Москва, ул. Примерная, д. 1\n"
-        "填写人：Другалев"
+        "填写人：Другалёв"
     )
     assert questionnaire_ws.row_dimensions[1].height == pytest.approx(54)
     assert questionnaire_ws["A1"].alignment.wrap_text
     assert summary_ws["A2"].value == (
         "Проект: Тестовый проект\n"
         "Адрес объекта: г. Москва, ул. Примерная, д. 1\n"
-        "Заполнено: Другалев"
+        "Заполнено: Другалёв"
     )
     assert summary_ws.row_dimensions[2].height == pytest.approx(60)
     assert summary_ws["A2"].alignment.wrap_text

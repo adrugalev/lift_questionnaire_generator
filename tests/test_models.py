@@ -10,6 +10,12 @@ def test_questionnaire_defaults():
     assert questionnaire.lift_groups == []
 
 
+def test_legacy_preparer_surname_is_normalized():
+    project = ProjectInfo(prepared_by="Другалев")
+
+    assert project.prepared_by == "Другалёв"
+
+
 def test_lift_group_accepts_optional_empty_fields():
     group = LiftGroup(lift_name="Лифт 1")
     assert group.lift_name == "Лифт 1"

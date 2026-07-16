@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProjectInfo(BaseModel):
@@ -17,6 +17,13 @@ class ProjectInfo(BaseModel):
     report_date: Optional[date] = None
     prepared_by: Optional[str] = None
     comment: Optional[str] = None
+
+    @field_validator("prepared_by", mode="before")
+    @classmethod
+    def normalize_preparer_surname(cls, value):
+        if isinstance(value, str) and value.strip() == "Другалев":
+            return "Другалёв"
+        return value
 
 
 class LiftGroup(BaseModel):
