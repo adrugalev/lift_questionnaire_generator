@@ -137,7 +137,50 @@ def test_project_name_goes_to_header_and_sheet_title(template_path, mapping_path
     ws = load_workbook(BytesIO(content)).active
     assert ws.title == "Тестовый проект"
     assert ws["A1"].value == "Проект: Тестовый проект"
+    assert ws["B1"].value == "项目：Тестовый проект"
     assert ws["C1"].value is None
+
+
+def test_preparer_is_written_below_project_name(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        project=ProjectInfo(
+            project_name="Тестовый проект",
+            address="г. Москва, ул. Примерная, д. 1",
+            prepared_by="Другалев",
+        ),
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                side_wall_finish="Шлифованная нержавеющая сталь EX-HS01",
+            )
+        ],
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    workbook = load_workbook(BytesIO(content))
+    questionnaire_ws = workbook.active
+    summary_ws = workbook["Саммэри"]
+
+    assert questionnaire_ws["A1"].value == (
+        "Проект: Тестовый проект\n"
+        "Адрес объекта: г. Москва, ул. Примерная, д. 1\n"
+        "Заполнено: Другалев"
+    )
+    assert questionnaire_ws["B1"].value == (
+        "项目：Тестовый проект\n"
+        "项目地址：г. Москва, ул. Примерная, д. 1\n"
+        "填写人：Другалев"
+    )
+    assert questionnaire_ws.row_dimensions[1].height == pytest.approx(54)
+    assert questionnaire_ws["A1"].alignment.wrap_text
+    assert summary_ws["A2"].value == (
+        "Проект: Тестовый проект\n"
+        "Адрес объекта: г. Москва, ул. Примерная, д. 1\n"
+        "Заполнено: Другалев"
+    )
+    assert summary_ws.row_dimensions[2].height == pytest.approx(60)
+    assert summary_ws["A2"].alignment.wrap_text
 
 
 def test_main_landing_floor_is_written_as_number_when_numeric(template_path, mapping_path):

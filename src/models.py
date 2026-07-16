@@ -15,6 +15,7 @@ class ProjectInfo(BaseModel):
     address: Optional[str] = None
     city: Optional[str] = None
     report_date: Optional[date] = None
+    prepared_by: Optional[str] = None
     comment: Optional[str] = None
 
 

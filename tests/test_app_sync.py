@@ -746,6 +746,17 @@ def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
     }
 
 
+def test_lift_team_surnames_match_reporting_documents_directory() -> None:
+    assert app.LIFT_TEAM_SURNAMES == (
+        "Баранова",
+        "Другалев",
+        "Конопельнюк",
+        "Платонов",
+        "Зимин",
+        "Попов",
+    )
+
+
 def test_lift_summary_breakdown_aggregates_matching_specs() -> None:
     assert app._lift_summary_breakdown([
         {"quantity": 1, "speed_ms": 2.5, "capacity_kg": 1000, "stops": 10},
@@ -882,6 +893,20 @@ def test_questionnaire_download_filename_uses_today_when_date_is_missing(monkeyp
     monkeypatch.setattr(app, "date", FakeDate)
 
     assert app._questionnaire_download_filename(questionnaire) == "Проект_16.07.2026.xlsx"
+
+
+def test_questionnaire_download_filename_includes_preparer_surname() -> None:
+    questionnaire = Questionnaire(
+        project=ProjectInfo(
+            project_name="ЖК Северный квартал",
+            report_date=app.date(2026, 7, 16),
+            prepared_by="Другалев",
+        )
+    )
+
+    assert app._questionnaire_download_filename(questionnaire) == (
+        "ЖК_Северный_квартал_Другалев_16.07.2026.xlsx"
+    )
 
 
 def test_selected_image_card_html_contains_label_and_value(tmp_path) -> None:

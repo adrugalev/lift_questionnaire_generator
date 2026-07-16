@@ -29,6 +29,14 @@ DEFAULT_TEMPLATE = ROOT / "templates" / "questionnaire_template.xlsx"
 MAPPING_PATH = ROOT / "data" / "excel_mapping.json"
 OPTIONS_PATH = ROOT / "data" / "options.json"
 SPEC_PARSER_REVISION = "rapidocr-table-v5-project-stamp"
+LIFT_TEAM_SURNAMES = (
+    "Баранова",
+    "Другалев",
+    "Конопельнюк",
+    "Платонов",
+    "Зимин",
+    "Попов",
+)
 APP_DIR = Path(__file__).resolve().parent
 LOCAL_TEMPLATES = APP_DIR / "templates"
 PREVIOUS_CP_TEMPLATES = (
@@ -559,6 +567,7 @@ def main() -> None:
     _render_version_caption(options)
 
     _specification_sidebar()
+    _render_lift_team_sidebar()
     _render_project_summary_sidebar()
 
     project_data = _project_block()
@@ -1128,6 +1137,27 @@ def _filled_field_styles_css() -> str:
             margin-top: 0.28rem;
         }
 
+        .lift-team-sidebar-title {
+            color: #313340;
+            font-size: 1rem;
+            font-weight: 700;
+            line-height: 1.2;
+            margin-bottom: 0.18rem;
+        }
+
+        .lift-team-sidebar-hint {
+            color: #6b7280;
+            font-size: 0.75rem;
+            line-height: 1.25;
+            margin-bottom: 0.35rem;
+        }
+
+        section[data-testid="stSidebar"] div[data-testid="stPills"] button {
+            font-size: 0.78rem !important;
+            min-height: 2rem !important;
+            padding: 0.25rem 0.65rem !important;
+        }
+
         </style>
         """
 
@@ -1215,6 +1245,32 @@ def _render_project_summary_sidebar() -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def _render_lift_team_sidebar() -> str | None:
+    prefill_project = st.session_state.get("prefill_project", {})
+    prefilled_surname = prefill_project.get("prepared_by")
+    if (
+        "project_prepared_by" not in st.session_state
+        and prefilled_surname in LIFT_TEAM_SURNAMES
+    ):
+        st.session_state["project_prepared_by"] = prefilled_surname
+
+    with st.sidebar.container(border=True):
+        st.markdown(
+            """
+            <div class="lift-team-sidebar-title">Команда лифтового направления</div>
+            <div class="lift-team-sidebar-hint">Кто заполняет опросный лист</div>
+            """,
+            unsafe_allow_html=True,
+        )
+        return st.pills(
+            "Сотрудник",
+            LIFT_TEAM_SURNAMES,
+            selection_mode="single",
+            key="project_prepared_by",
+            label_visibility="collapsed",
+        )
 
 
 def _project_summary_from_state() -> dict[str, Any]:
@@ -1336,6 +1392,7 @@ def _widget_state_value(kind: str, value: Any) -> Any:
 
 def _project_block() -> dict[str, Any]:
     defaults = st.session_state.prefill_project
+    prepared_by = st.session_state.get("project_prepared_by") or defaults.get("prepared_by")
     with st.expander("Данные проекта", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -1368,6 +1425,7 @@ def _project_block() -> dict[str, Any]:
         "customer": customer,
         "address": address,
         "report_date": report_date,
+        "prepared_by": prepared_by,
     }
 
 
@@ -2768,8 +2826,13 @@ def _download_block(questionnaire: Questionnaire) -> None:
 
 def _questionnaire_download_filename(questionnaire: Questionnaire) -> str:
     project_name = safe_filename(questionnaire.project.project_name or "questionnaire")
+    prepared_by = questionnaire.project.prepared_by
     report_date = questionnaire.project.report_date or date.today()
-    return f"{project_name}_{report_date:%d.%m.%Y}.xlsx"
+    file_parts = [project_name]
+    if prepared_by:
+        file_parts.append(safe_filename(prepared_by))
+    file_parts.append(f"{report_date:%d.%m.%Y}")
+    return f"{'_'.join(file_parts)}.xlsx"
 
 
 def _drop_empty(data: dict[str, Any]) -> dict[str, Any]:

@@ -130,6 +130,8 @@ QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT = 14.4
 QUESTIONNAIRE_WRAPPED_ROW_HEIGHT = 28.8
 VISUAL_SUMMARY_TITLE_ROW_HEIGHT = 25.95
 VISUAL_SUMMARY_PROJECT_ROW_HEIGHT = 25.95
+VISUAL_SUMMARY_PROJECT_TWO_LINE_ROW_HEIGHT = 43.0
+VISUAL_SUMMARY_PROJECT_DETAILS_ROW_HEIGHT = 60.0
 VISUAL_SUMMARY_GROUP_ROW_HEIGHT = 27.0
 VISUAL_SUMMARY_SECTION_ROW_HEIGHT = 19.95
 VISUAL_SUMMARY_MATERIAL_ROW_HEIGHT = 72.0
@@ -143,6 +145,8 @@ VISUAL_SUMMARY_EQUIPMENT_VALUE_ROW_HEIGHT = (
     VISUAL_SUMMARY_EQUIPMENT_ROW_HEIGHT - VISUAL_SUMMARY_EQUIPMENT_LABEL_ROW_HEIGHT
 )
 QUESTIONNAIRE_PROJECT_ROW_HEIGHT = 18.0
+QUESTIONNAIRE_PROJECT_TWO_LINE_ROW_HEIGHT = 36.0
+QUESTIONNAIRE_PROJECT_DETAILS_ROW_HEIGHT = 54.0
 QUESTIONNAIRE_SECTION_ROW_HEIGHT = 15.6
 QUESTIONNAIRE_FACTORY_ROW_HEIGHT = 18.0
 QUESTIONNAIRE_HEADER_FILL_COLOR = Color(theme=2, tint=-0.0999786370433668)
@@ -213,8 +217,15 @@ def generate_questionnaire_xlsx(
     _clear_group_values(worksheet, first_group_col, group_count, group_rows, project_rows)
 
     project_name = questionnaire.project.project_name
-    if project_name and "project_name" in project_rows:
-        worksheet.cell(row=int(project_rows["project_name"]), column=1).value = f"Проект: {project_name}"
+    project_address = questionnaire.project.address
+    prepared_by = questionnaire.project.prepared_by
+    project_header = _project_header_text(project_name, project_address, prepared_by)
+    project_header_zh = _project_header_text_zh(project_name, project_address, prepared_by)
+    if project_header and "project_name" in project_rows:
+        project_row = int(project_rows["project_name"])
+        worksheet.cell(row=project_row, column=1).value = project_header
+        worksheet.cell(row=project_row, column=2).value = project_header_zh
+    if project_name:
         worksheet.title = _worksheet_title(project_name)
 
     for index, group in enumerate(questionnaire.lift_groups):
@@ -261,6 +272,36 @@ def _worksheet_title(project_name: str) -> str:
         title = title.replace(character, " ")
     title = " ".join(title.split())
     return (title or "Опросник")[:31]
+
+
+def _project_header_text(
+    project_name: str | None,
+    project_address: str | None,
+    prepared_by: str | None,
+) -> str:
+    lines: list[str] = []
+    if project_name:
+        lines.append(f"Проект: {project_name}")
+    if project_address:
+        lines.append(f"Адрес объекта: {project_address}")
+    if prepared_by:
+        lines.append(f"Заполнено: {prepared_by}")
+    return "\n".join(lines)
+
+
+def _project_header_text_zh(
+    project_name: str | None,
+    project_address: str | None,
+    prepared_by: str | None,
+) -> str:
+    lines: list[str] = []
+    if project_name:
+        lines.append(f"项目：{project_name}")
+    if project_address:
+        lines.append(f"项目地址：{project_address}")
+    if prepared_by:
+        lines.append(f"填写人：{prepared_by}")
+    return "\n".join(lines)
 
 
 def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
@@ -408,7 +449,14 @@ def _last_meaningful_questionnaire_row(worksheet: Worksheet, last_col: int) -> i
 
 
 def _style_questionnaire_project_row(worksheet: Worksheet, row: int, last_col: int, border: Border) -> None:
-    worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_ROW_HEIGHT
+    project_header = str(worksheet.cell(row=row, column=1).value or "")
+    project_header_lines = project_header.count("\n") + 1
+    if project_header_lines >= 3:
+        worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_DETAILS_ROW_HEIGHT
+    elif project_header_lines == 2:
+        worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_TWO_LINE_ROW_HEIGHT
+    else:
+        worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_ROW_HEIGHT
     fill = PatternFill("solid", fgColor=QUESTIONNAIRE_HEADER_FILL_COLOR)
     for column in range(1, last_col + 1):
         cell = worksheet.cell(row=row, column=column)
@@ -527,9 +575,17 @@ def _append_visual_summary(workbook, questionnaire: Questionnaire) -> None:
     row = 1
     _write_visual_summary_title(worksheet, row)
     project_name = questionnaire.project.project_name
-    if project_name:
+    project_address = questionnaire.project.address
+    prepared_by = questionnaire.project.prepared_by
+    if project_name or project_address or prepared_by:
         row += 1
-        _write_visual_project_title(worksheet, row, project_name)
+        _write_visual_project_title(
+            worksheet,
+            row,
+            project_name,
+            project_address,
+            prepared_by,
+        )
     row += 2
     for group_index, group, material_items, equipment_items in groups_with_items:
         _write_visual_group_title(worksheet, row, group_index, group)
@@ -585,13 +641,25 @@ def _write_visual_summary_title(worksheet: Worksheet, row: int) -> None:
     worksheet.row_dimensions[row].height = VISUAL_SUMMARY_TITLE_ROW_HEIGHT
 
 
-def _write_visual_project_title(worksheet: Worksheet, row: int, project_name: str) -> None:
+def _write_visual_project_title(
+    worksheet: Worksheet,
+    row: int,
+    project_name: str | None,
+    project_address: str | None = None,
+    prepared_by: str | None = None,
+) -> None:
     worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
     cell = worksheet.cell(row=row, column=1)
-    cell.value = f"Проект: {project_name}"
+    cell.value = _project_header_text(project_name, project_address, prepared_by)
     cell.font = Font(bold=True, size=VISUAL_SUMMARY_PROJECT_FONT_SIZE, color="475569")
-    cell.alignment = Alignment(horizontal="center", vertical="center")
-    worksheet.row_dimensions[row].height = VISUAL_SUMMARY_PROJECT_ROW_HEIGHT
+    cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    project_header_lines = str(cell.value or "").count("\n") + 1
+    if project_header_lines >= 3:
+        worksheet.row_dimensions[row].height = VISUAL_SUMMARY_PROJECT_DETAILS_ROW_HEIGHT
+    elif project_header_lines == 2:
+        worksheet.row_dimensions[row].height = VISUAL_SUMMARY_PROJECT_TWO_LINE_ROW_HEIGHT
+    else:
+        worksheet.row_dimensions[row].height = VISUAL_SUMMARY_PROJECT_ROW_HEIGHT
 
 
 def _write_visual_group_title(worksheet: Worksheet, row: int, group_index: int, group: Any) -> None:
