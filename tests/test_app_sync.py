@@ -699,6 +699,7 @@ def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
     assert ">Группы<" in rendered[0]
     assert "Лифтов в проекте" not in rendered[0]
     assert "4 лифта — 1,6 м/с, 630 кг, 7 ост." in rendered[0]
+    assert '</div>\n            <div class="project-summary-breakdown">' in rendered[0]
 
 
 def test_clamp_active_group_selection_resets_old_text_label(monkeypatch) -> None:
@@ -736,6 +737,7 @@ def test_project_summary_breakdown_uses_small_text_and_keeps_values_aligned() ->
     assert "min-height: 1.15em;" in css
     assert ".project-summary-breakdown {" in css
     assert "font-size: 0.68rem;" in css
+    assert "border-top: 1px solid #e1e7ef;" in css
 
 
 def test_selected_image_card_html_contains_label_and_value(tmp_path) -> None:

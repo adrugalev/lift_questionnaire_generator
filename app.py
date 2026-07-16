@@ -1087,7 +1087,7 @@ def _filled_field_styles_css() -> str:
         .project-summary-metrics {
             display: grid;
             gap: 0.55rem;
-            grid-template-columns: 1.65fr 0.85fr;
+            grid-template-columns: 1fr 1fr;
         }
 
         .project-summary-metric {
@@ -1116,10 +1116,12 @@ def _filled_field_styles_css() -> str:
         }
 
         .project-summary-breakdown {
+            border-top: 1px solid #e1e7ef;
             color: #667085;
             font-size: 0.68rem;
             line-height: 1.35;
-            margin-top: 0.45rem;
+            margin-top: 0.7rem;
+            padding: 0.65rem 0.15rem 0;
         }
 
         .project-summary-breakdown-line + .project-summary-breakdown-line {
@@ -1189,6 +1191,9 @@ def _render_project_summary_sidebar() -> None:
         f'<div class="project-summary-breakdown-line">{html.escape(line)}</div>'
         for line in summary["lift_breakdown"]
     )
+    lift_breakdown_block = (
+        f'<div class="project-summary-breakdown">{lift_breakdown}</div>' if lift_breakdown else ""
+    )
     st.sidebar.markdown(
         f"""
         <div class="project-summary-card">
@@ -1198,13 +1203,13 @@ def _render_project_summary_sidebar() -> None:
                 <div class="project-summary-metric">
                     <span class="project-summary-metric-label">Лифты</span>
                     <span class="project-summary-metric-value">{summary["lift_count"]}</span>
-                    <div class="project-summary-breakdown">{lift_breakdown}</div>
                 </div>
                 <div class="project-summary-metric">
                     <span class="project-summary-metric-label">Группы</span>
                     <span class="project-summary-metric-value">{summary["group_count"]}</span>
                 </div>
             </div>
+            {lift_breakdown_block}
         </div>
         """,
         unsafe_allow_html=True,
