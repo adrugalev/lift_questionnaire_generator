@@ -2740,7 +2740,7 @@ def _download_block(questionnaire: Questionnaire) -> None:
                 MAPPING_PATH,
                 include_summary_sheet=include_summary_sheet,
             )
-            file_name = f"{safe_filename(questionnaire.project.project_name or 'questionnaire')}.xlsx"
+            file_name = _questionnaire_download_filename(questionnaire)
             st.download_button(
                 "Скачать заполненный Excel",
                 data=content,
@@ -2751,6 +2751,12 @@ def _download_block(questionnaire: Questionnaire) -> None:
             st.error(str(exc))
         except Exception as exc:
             st.error(f"Не удалось сформировать Excel: {exc}")
+
+
+def _questionnaire_download_filename(questionnaire: Questionnaire) -> str:
+    project_name = safe_filename(questionnaire.project.project_name or "questionnaire")
+    report_date = questionnaire.project.report_date or date.today()
+    return f"{project_name}_{report_date:%d.%m.%Y}.xlsx"
 
 
 def _drop_empty(data: dict[str, Any]) -> dict[str, Any]:

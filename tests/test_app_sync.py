@@ -1,6 +1,6 @@
 import app
 from app import SYNCABLE_GROUP_FIELDS
-from src.models import LiftGroup, Questionnaire
+from src.models import LiftGroup, ProjectInfo, Questionnaire
 from src.validators import ValidationMessage
 
 
@@ -833,7 +833,14 @@ def test_project_summary_breakdown_uses_small_text_and_keeps_values_aligned() ->
 def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) -> None:
     checkbox_calls: list[dict] = []
     generator_calls: list[dict] = []
-    questionnaire = Questionnaire(lift_groups=[LiftGroup(lift_name="Л1", quantity=1)])
+    download_calls: list[dict] = []
+    questionnaire = Questionnaire(
+        project=ProjectInfo(
+            project_name="Бизнес-центр / Орбита",
+            report_date=app.date(2026, 7, 15),
+        ),
+        lift_groups=[LiftGroup(lift_name="Л1", quantity=1)],
+    )
 
     def fake_checkbox(label, **kwargs):
         checkbox_calls.append({"label": label, **kwargs})
@@ -845,7 +852,11 @@ def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) ->
 
     monkeypatch.setattr(app.st, "checkbox", fake_checkbox)
     monkeypatch.setattr(app.st, "button", lambda *args, **kwargs: True)
-    monkeypatch.setattr(app.st, "download_button", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        app.st,
+        "download_button",
+        lambda *args, **kwargs: download_calls.append(kwargs),
+    )
     monkeypatch.setattr(app, "validate_questionnaire", lambda questionnaire: [])
     monkeypatch.setattr(app, "generate_questionnaire_xlsx", fake_generator)
 
@@ -857,6 +868,20 @@ def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) ->
         "key": "include_summary_sheet",
     }]
     assert generator_calls == [{"include_summary_sheet": False}]
+    assert download_calls[0]["file_name"] == "Бизнес-центр_Орбита_15.07.2026.xlsx"
+
+
+def test_questionnaire_download_filename_uses_today_when_date_is_missing(monkeypatch) -> None:
+    questionnaire = Questionnaire(project=ProjectInfo(project_name="Проект"))
+
+    class FakeDate(app.date):
+        @classmethod
+        def today(cls):
+            return cls(2026, 7, 16)
+
+    monkeypatch.setattr(app, "date", FakeDate)
+
+    assert app._questionnaire_download_filename(questionnaire) == "Проект_16.07.2026.xlsx"
 
 
 def test_selected_image_card_html_contains_label_and_value(tmp_path) -> None:
