@@ -1410,8 +1410,11 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             section_names = list(FIELD_GROUPS.keys())
             completed_sections = _completed_sections(group)
             active_section_key = f"group_{index}_active_section"
-            if st.session_state.get(active_section_key) == "Дополнительно":
-                st.session_state[active_section_key] = "Дополнительные опции"
+            stored_section = st.session_state.get(active_section_key)
+            if stored_section is not None:
+                normalized_section = _normalize_group_section_name(stored_section) or section_names[0]
+                if normalized_section != stored_section:
+                    st.session_state[active_section_key] = normalized_section
             section = st.radio(
                 "Раздел параметров",
                 section_names,
@@ -1420,6 +1423,7 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
                 key=active_section_key,
                 format_func=lambda name: _section_display_label(name, completed_sections),
             )
+            section = _normalize_group_section_name(section) or section_names[0]
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
             fields = FIELD_GROUPS[section]
             if section == "Двери":
@@ -1731,6 +1735,17 @@ def _is_filled_value(value: Any) -> bool:
 
 def _section_display_label(section: str, completed_sections: set[str]) -> str:
     return f"{section} {SECTION_COMPLETE_MARK}" if section in completed_sections else section
+
+
+def _normalize_group_section_name(value: Any) -> str | None:
+    if value in ("", None):
+        return None
+    section = str(value).strip()
+    if section == "Дополнительно":
+        section = "Дополнительные опции"
+    if section.endswith(SECTION_COMPLETE_MARK):
+        section = section[: -len(SECTION_COMPLETE_MARK)].rstrip()
+    return section if section in FIELD_GROUPS else None
 
 
 def _normalize_group_lists() -> None:

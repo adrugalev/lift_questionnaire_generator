@@ -1246,6 +1246,14 @@ def test_section_display_label_adds_checkmark_for_completed_section() -> None:
     assert app._section_display_label("Двери", {"Кабина"}) == "Двери"
 
 
+def test_group_section_name_normalizes_dynamic_and_legacy_labels() -> None:
+    assert app._normalize_group_section_name("Кабина ✅") == "Кабина"
+    assert app._normalize_group_section_name("Двери ✅ ") == "Двери"
+    assert app._normalize_group_section_name("Дополнительно") == "Дополнительные опции"
+    assert app._normalize_group_section_name("Неизвестный раздел") is None
+    assert app._normalize_group_section_name(None) is None
+
+
 def test_group_navigation_items_show_all_groups() -> None:
     filled_group = {
         field: "filled"
