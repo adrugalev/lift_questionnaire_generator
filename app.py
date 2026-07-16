@@ -1094,6 +1094,8 @@ def _filled_field_styles_css() -> str:
         .project-summary-metric {
             background: #f4f7fb;
             border-radius: 0.6rem;
+            display: flex;
+            flex-direction: column;
             padding: 0.55rem 0.65rem;
         }
 
@@ -1110,7 +1112,8 @@ def _filled_field_styles_css() -> str:
             font-size: 1.45rem;
             font-weight: 700;
             line-height: 1.15;
-            margin-top: 0.18rem;
+            margin-top: auto;
+            padding-top: 0.18rem;
         }
 
         </style>

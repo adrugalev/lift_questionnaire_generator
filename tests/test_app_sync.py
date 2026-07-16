@@ -682,6 +682,14 @@ def test_inline_thumbnail_css_fits_full_image() -> None:
     assert "object-fit: contain;" in app._filled_field_styles_css()
 
 
+def test_project_summary_metric_values_are_bottom_aligned() -> None:
+    css = app._filled_field_styles_css()
+
+    assert ".project-summary-metric {" in css
+    assert "flex-direction: column;" in css
+    assert "margin-top: auto;" in css
+
+
 def test_selected_image_card_html_contains_label_and_value(tmp_path) -> None:
     image_path = tmp_path / "EX-AC99A.png"
     image_path.write_bytes(b"fake")
