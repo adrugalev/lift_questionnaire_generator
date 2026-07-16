@@ -559,6 +559,7 @@ def main() -> None:
     _render_version_caption(options)
 
     has_specification = _specification_sidebar()
+    _render_project_summary_sidebar()
     st.sidebar.caption(f"Режим: {'заполнение по ТЗ' if has_specification else 'ручное заполнение'}")
 
     project_data = _project_block()
@@ -1060,6 +1061,58 @@ def _filled_field_styles_css() -> str:
             width: 100%;
         }
 
+        .project-summary-card {
+            background: #ffffff;
+            border: 1px solid #dce3eb;
+            border-radius: 0.8rem;
+            box-shadow: 0 0.15rem 0.55rem rgba(49, 51, 64, 0.06);
+            margin: 0.65rem 0 0.35rem;
+            padding: 0.9rem 1rem;
+        }
+
+        .project-summary-title {
+            color: #313340;
+            font-size: 1rem;
+            font-weight: 700;
+            margin-bottom: 0.2rem;
+        }
+
+        .project-summary-name {
+            color: #6b7280;
+            font-size: 0.78rem;
+            line-height: 1.25;
+            margin-bottom: 0.75rem;
+            overflow-wrap: anywhere;
+        }
+
+        .project-summary-metrics {
+            display: grid;
+            gap: 0.55rem;
+            grid-template-columns: 1fr 1fr;
+        }
+
+        .project-summary-metric {
+            background: #f4f7fb;
+            border-radius: 0.6rem;
+            padding: 0.55rem 0.65rem;
+        }
+
+        .project-summary-metric-label {
+            color: #6b7280;
+            display: block;
+            font-size: 0.72rem;
+            line-height: 1.15;
+        }
+
+        .project-summary-metric-value {
+            color: #2f66e8;
+            display: block;
+            font-size: 1.45rem;
+            font-weight: 700;
+            line-height: 1.15;
+            margin-top: 0.18rem;
+        }
+
         </style>
         """
 
@@ -1114,6 +1167,48 @@ def _specification_sidebar() -> bool:
             ]
             st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
     return True
+
+
+def _render_project_summary_sidebar() -> None:
+    summary = _project_summary_from_state()
+    project_name = html.escape(summary["project_name"] or "Название проекта не указано")
+    st.sidebar.markdown(
+        f"""
+        <div class="project-summary-card">
+            <div class="project-summary-title">Кратко о проекте</div>
+            <div class="project-summary-name">{project_name}</div>
+            <div class="project-summary-metrics">
+                <div class="project-summary-metric">
+                    <span class="project-summary-metric-label">Лифтов в проекте</span>
+                    <span class="project-summary-metric-value">{summary["lift_count"]}</span>
+                </div>
+                <div class="project-summary-metric">
+                    <span class="project-summary-metric-label">Групп</span>
+                    <span class="project-summary-metric-value">{summary["group_count"]}</span>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _project_summary_from_state() -> dict[str, Any]:
+    group_count = max(1, int(st.session_state.get("group_count", 1)))
+    prefill_project = st.session_state.get("prefill_project", {})
+    project_name = str(
+        st.session_state.get("project_project_name", prefill_project.get("project_name")) or ""
+    ).strip()
+    lift_count = 0
+    for index in range(group_count):
+        defaults = _group_defaults(index)
+        quantity = st.session_state.get(f"group_{index}_quantity", defaults.get("quantity"))
+        lift_count += _parse_positive_int_silent(quantity) or 0
+    return {
+        "project_name": project_name,
+        "group_count": group_count,
+        "lift_count": lift_count,
+    }
 
 
 def _apply_parse_result(result) -> None:
@@ -1414,10 +1509,14 @@ def _render_group_navigation(groups: list[dict[str, Any]]) -> None:
 
 
 def _group_navigation_items(groups: list[dict[str, Any]]) -> list[tuple[int, str]]:
-    return [
-        (index, _format_group_display_label(group.get("lift_name"), group.get("quantity")) or f"Группа {index + 1}")
-        for index, group in enumerate(groups)
-    ]
+    items: list[tuple[int, str]] = []
+    for index, group in enumerate(groups):
+        capacity = group.get("capacity_kg")
+        label = _format_group_display_label(group.get("lift_name"), group.get("quantity"), capacity)
+        if not label:
+            label = _append_capacity_to_group_label(f"Группа {index + 1}", capacity)
+        items.append((index, label))
+    return items
 
 
 def _selected_image_preview_items(
@@ -1452,17 +1551,24 @@ def _group_display_label(index: int) -> str:
     defaults = _group_defaults(index)
     lift_name = st.session_state.get(f"group_{index}_lift_name", defaults.get("lift_name"))
     quantity = st.session_state.get(f"group_{index}_quantity", defaults.get("quantity"))
-    return _format_group_display_label(lift_name, quantity) or f"Группа {index + 1}"
+    capacity = st.session_state.get(f"group_{index}_capacity_kg", defaults.get("capacity_kg"))
+    return _format_group_display_label(lift_name, quantity, capacity) or _append_capacity_to_group_label(
+        f"Группа {index + 1}", capacity
+    )
 
 
-def _format_group_display_label(lift_name: Any, quantity: Any) -> str | None:
+def _format_group_display_label(lift_name: Any, quantity: Any, capacity_kg: Any = None) -> str | None:
     text = str(lift_name or "").strip()
     if not text:
         return None
     count = _parse_positive_int_silent(quantity)
-    if count is None or count <= 1:
-        return text
-    return _lift_name_range(text, count) or text
+    label = text if count is None or count <= 1 else (_lift_name_range(text, count) or text)
+    return _append_capacity_to_group_label(label, capacity_kg)
+
+
+def _append_capacity_to_group_label(label: str, capacity_kg: Any) -> str:
+    capacity = _parse_positive_int_silent(capacity_kg)
+    return f"{label} ({capacity} кг)" if capacity is not None else label
 
 
 def _parse_positive_int_silent(value: Any) -> int | None:
@@ -2374,7 +2480,7 @@ def _label_for_validation_location(location: str, questionnaire: Questionnaire) 
         return str(location)
 
     group = questionnaire.lift_groups[group_index]
-    return _format_group_display_label(group.lift_name, group.quantity) or str(location)
+    return _format_group_display_label(group.lift_name, group.quantity, group.capacity_kg) or str(location)
 
 
 def _render_mgn_attention_block(labels: list[str]) -> None:

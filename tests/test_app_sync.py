@@ -623,11 +623,11 @@ def test_wall_finish_selection_does_not_fill_absent_component_finishes(monkeypat
 
 
 def test_group_display_label_uses_single_lift_name() -> None:
-    assert app._format_group_display_label("Л1", 1) == "Л1"
+    assert app._format_group_display_label("Л1", 1, 1000) == "Л1 (1000 кг)"
 
 
 def test_group_display_label_uses_lift_range_for_multiple_lifts() -> None:
-    assert app._format_group_display_label("Л1", 3) == "Л1-Л3"
+    assert app._format_group_display_label("Л1", 3, 630) == "Л1-Л3 (630 кг)"
 
 
 def test_group_display_label_keeps_existing_range() -> None:
@@ -636,6 +636,23 @@ def test_group_display_label_keeps_existing_range() -> None:
 
 def test_group_display_label_preserves_number_padding() -> None:
     assert app._format_group_display_label("Л01", 3) == "Л01-Л03"
+
+
+def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 3,
+        "prefill_project": {"project_name": "Проект из ТЗ"},
+        "prefill_groups": [{"quantity": 1}, {"quantity": 2}, {}],
+        "group_drafts": [{}, {"quantity": 3}, {}],
+        "group_0_quantity": "2",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._project_summary_from_state() == {
+        "project_name": "Проект из ТЗ",
+        "group_count": 3,
+        "lift_count": 5,
+    }
 
 
 def test_clamp_active_group_selection_resets_old_text_label(monkeypatch) -> None:
@@ -1177,10 +1194,13 @@ def test_group_navigation_items_show_all_groups() -> None:
         for fields in app.FIELD_GROUPS.values()
         for field, _, _, _ in fields
     }
-    filled_group.update({"lift_name": "Л1", "quantity": 3})
+    filled_group.update({"lift_name": "Л1", "quantity": 3, "capacity_kg": 1000})
     empty_group = {}
 
-    assert app._group_navigation_items([filled_group, empty_group]) == [(0, "Л1-Л3"), (1, "Группа 2")]
+    assert app._group_navigation_items([filled_group, empty_group]) == [
+        (0, "Л1-Л3 (1000 кг)"),
+        (1, "Группа 2"),
+    ]
 
 
 def test_add_group_makes_new_group_active(monkeypatch) -> None:
