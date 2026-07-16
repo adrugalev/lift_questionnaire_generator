@@ -37,6 +37,55 @@ def test_syncable_fields_exclude_geometry_and_core_specs() -> None:
     assert SYNCABLE_GROUP_FIELDS.isdisjoint(excluded)
 
 
+def test_sync_common_fields_uses_selected_group_and_preserves_its_changes(monkeypatch) -> None:
+    session_state = FakeSessionState(
+        group_count=3,
+        active_group_index=1,
+        prefill_groups=[
+            {
+                "capacity_kg": 630,
+                "side_wall_finish": "Старая отделка первой группы",
+                "floor_finish": "Старый пол первой группы",
+                "option_bypass": "ДА",
+            },
+            {
+                "capacity_kg": 1000,
+                "side_wall_finish": "Старая отделка выбранной группы",
+                "floor_finish": "Старый пол выбранной группы",
+            },
+            {
+                "capacity_kg": 1600,
+                "side_wall_finish": "Старая отделка третьей группы",
+                "floor_finish": "Старый пол третьей группы",
+                "option_bypass": "ДА",
+            },
+        ],
+        group_drafts=[{}, {}, {}],
+        extracted_group_fields=[set(), set(), set()],
+        group_1_side_wall_finish="Окрашенная сталь EX-YS12",
+        group_1_floor_finish="Керамогранит EX-DM138",
+        group_1_option_ard=True,
+        group_1_option_bypass=False,
+    )
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._sync_common_fields_from_selected_group(1)
+
+    assert session_state["group_1_side_wall_finish"] == "Окрашенная сталь EX-YS12"
+    assert session_state["group_1_floor_finish"] == "Керамогранит EX-DM138"
+    for index in (0, 2):
+        assert session_state[f"group_{index}_side_wall_finish"] == "Окрашенная сталь EX-YS12"
+        assert session_state[f"group_{index}_floor_finish"] == "Керамогранит EX-DM138"
+        assert session_state[f"group_{index}_option_ard"] is True
+        assert session_state[f"group_{index}_option_bypass"] is False
+        assert "option_bypass" not in session_state.prefill_groups[index]
+        assert "option_bypass" not in session_state.group_drafts[index]
+
+    assert session_state.prefill_groups[0]["capacity_kg"] == 630
+    assert session_state.prefill_groups[1]["capacity_kg"] == 1000
+    assert session_state.prefill_groups[2]["capacity_kg"] == 1600
+
+
 def test_capacity_options_are_standard_values() -> None:
     assert app.CAPACITY_OPTIONS_KG == [
         400,

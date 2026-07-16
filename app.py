@@ -304,6 +304,7 @@ SYNCABLE_GROUP_FIELDS = {
     "seismic",
     "mgn_accessibility",
 }
+SYNCABLE_GROUP_FIELDS.update(ADDITIONAL_OPTION_TRANSLATIONS)
 
 FIELD_GROUPS = {
     "Основные": [
@@ -1396,7 +1397,7 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             disabled=st.session_state.group_count <= 1,
             use_container_width=True,
         ):
-            _sync_common_fields_from_first_group()
+            _sync_common_fields_from_selected_group(int(st.session_state.active_group_index))
             st.rerun()
 
     nav_groups = [_collect_group_from_state(index, _group_defaults(index)) for index in range(st.session_state.group_count)]
@@ -1809,21 +1810,32 @@ def _delete_group(index: int) -> None:
     _sync_group_widgets_from_group_data(current_groups)
 
 
-def _sync_common_fields_from_first_group() -> None:
-    source = _collect_group_from_state(0, _group_defaults(0))
-    values = {
-        field: source.get(field)
-        for field in SYNCABLE_GROUP_FIELDS
-        if source.get(field) not in ("", None, OTHER_OPTION)
-    }
-    if not values:
+def _sync_common_fields_from_selected_group(source_index: int) -> None:
+    _normalize_group_lists()
+    if source_index < 0 or source_index >= st.session_state.group_count:
         return
 
-    for index in range(1, st.session_state.group_count):
+    source = _collect_group_from_state(source_index, _group_defaults(source_index))
+    for index in range(st.session_state.group_count):
+        if index == source_index:
+            continue
         draft = _ensure_group_draft(index)
-        for field, value in values.items():
+        prefill = st.session_state.prefill_groups[index]
+        for field in SYNCABLE_GROUP_FIELDS:
+            value = source.get(field)
+            key = f"group_{index}_{field}"
+            if value in ("", None, OTHER_OPTION):
+                draft.pop(field, None)
+                prefill.pop(field, None)
+                st.session_state.pop(f"{key}_custom", None)
+                if field in ADDITIONAL_OPTION_TRANSLATIONS:
+                    st.session_state[key] = False
+                else:
+                    st.session_state.pop(key, None)
+                continue
             draft[field] = value
-            st.session_state[f"group_{index}_{field}"] = _widget_state_value(_field_kind(field), value)
+            prefill[field] = value
+            st.session_state[key] = _widget_state_value(_field_kind(field), value)
 
 
 def _field_kind(field_name: str) -> str:
