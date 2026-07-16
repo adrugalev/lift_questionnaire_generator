@@ -830,6 +830,35 @@ def test_project_summary_breakdown_uses_small_text_and_keeps_values_aligned() ->
     assert "border-top: 1px solid #e1e7ef;" in css
 
 
+def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) -> None:
+    checkbox_calls: list[dict] = []
+    generator_calls: list[dict] = []
+    questionnaire = Questionnaire(lift_groups=[LiftGroup(lift_name="Л1", quantity=1)])
+
+    def fake_checkbox(label, **kwargs):
+        checkbox_calls.append({"label": label, **kwargs})
+        return False
+
+    def fake_generator(*args, **kwargs):
+        generator_calls.append(kwargs)
+        return b"xlsx"
+
+    monkeypatch.setattr(app.st, "checkbox", fake_checkbox)
+    monkeypatch.setattr(app.st, "button", lambda *args, **kwargs: True)
+    monkeypatch.setattr(app.st, "download_button", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app, "validate_questionnaire", lambda questionnaire: [])
+    monkeypatch.setattr(app, "generate_questionnaire_xlsx", fake_generator)
+
+    app._download_block(questionnaire)
+
+    assert checkbox_calls == [{
+        "label": "Добавить саммэри-лист в опросник",
+        "value": True,
+        "key": "include_summary_sheet",
+    }]
+    assert generator_calls == [{"include_summary_sheet": False}]
+
+
 def test_selected_image_card_html_contains_label_and_value(tmp_path) -> None:
     image_path = tmp_path / "EX-AC99A.png"
     image_path.write_bytes(b"fake")

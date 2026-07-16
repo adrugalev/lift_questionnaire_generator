@@ -167,6 +167,8 @@ def generate_questionnaire_xlsx(
     questionnaire: Questionnaire,
     mapping_path: str | Path,
     output_path: str | Path | None = None,
+    *,
+    include_summary_sheet: bool = True,
 ) -> bytes:
     mapping = load_mapping(mapping_path)
     workbook = load_workbook(template_path)
@@ -212,7 +214,10 @@ def generate_questionnaire_xlsx(
                 worksheet.cell(row=int(row), column=column).value = value
     _fit_questionnaire_layout(worksheet, first_group_col, group_count)
     _apply_questionnaire_reference_style(worksheet, first_group_col + group_count - 1)
-    _append_visual_summary(workbook, questionnaire)
+    if include_summary_sheet:
+        _append_visual_summary(workbook, questionnaire)
+    else:
+        _remove_visual_summary_sheet(workbook)
 
     if output_path:
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
@@ -532,6 +537,12 @@ def _create_visual_summary_sheet(workbook) -> Worksheet:
     if sheet_name in workbook.sheetnames:
         workbook.remove(workbook[sheet_name])
     return workbook.create_sheet(sheet_name)
+
+
+def _remove_visual_summary_sheet(workbook) -> None:
+    sheet_name = "Саммэри"
+    if sheet_name in workbook.sheetnames:
+        workbook.remove(workbook[sheet_name])
 
 
 def _setup_visual_summary_sheet(worksheet: Worksheet) -> None:

@@ -448,3 +448,19 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert "<rowOff>152400</rowOff>" in drawing_xml
     assert "<colOff>676275</colOff>" in drawing_xml
     assert "<rowOff>238125</rowOff>" in drawing_xml
+
+
+def test_visual_summary_sheet_can_be_omitted(template_path, mapping_path, tmp_path):
+    template_with_summary = tmp_path / "template_with_summary.xlsx"
+    workbook = load_workbook(template_path)
+    workbook.create_sheet("Саммэри")
+    workbook.save(template_with_summary)
+
+    content = generate_questionnaire_xlsx(
+        template_with_summary,
+        _questionnaire(1),
+        mapping_path,
+        include_summary_sheet=False,
+    )
+
+    assert "Саммэри" not in load_workbook(BytesIO(content)).sheetnames

@@ -2727,9 +2727,19 @@ def _render_mgn_attention_block(labels: list[str]) -> None:
 
 def _download_block(questionnaire: Questionnaire) -> None:
     disabled = any(message.level == "error" for message in validate_questionnaire(questionnaire))
+    include_summary_sheet = st.checkbox(
+        "Добавить саммэри-лист в опросник",
+        value=True,
+        key="include_summary_sheet",
+    )
     if st.button("Сгенерировать опросник", type="primary", disabled=disabled):
         try:
-            content = generate_questionnaire_xlsx(DEFAULT_TEMPLATE, questionnaire, MAPPING_PATH)
+            content = generate_questionnaire_xlsx(
+                DEFAULT_TEMPLATE,
+                questionnaire,
+                MAPPING_PATH,
+                include_summary_sheet=include_summary_sheet,
+            )
             file_name = f"{safe_filename(questionnaire.project.project_name or 'questionnaire')}.xlsx"
             st.download_button(
                 "Скачать заполненный Excel",
