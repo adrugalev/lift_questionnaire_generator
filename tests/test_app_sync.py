@@ -1318,6 +1318,27 @@ def test_group_navigation_items_show_all_groups() -> None:
     ]
 
 
+def test_activate_group_refreshes_section_widget_identity(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "active_group_index": 0,
+        "group_section_widget_revision": 3,
+        "group_0_active_section": "Кабина",
+        "group_1_active_section": "Основные",
+        "group_0_active_section_widget_3": "Кабина",
+        "group_1_active_section_widget_3": "Основные",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._activate_group(1)
+
+    assert session_state["active_group_index"] == 1
+    assert session_state["group_section_widget_revision"] == 4
+    assert session_state["group_0_active_section"] == "Кабина"
+    assert session_state["group_1_active_section"] == "Основные"
+    assert "group_0_active_section_widget_3" not in session_state
+    assert "group_1_active_section_widget_3" not in session_state
+
+
 def test_add_group_makes_new_group_active(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_count": 1,

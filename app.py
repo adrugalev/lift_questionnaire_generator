@@ -1145,6 +1145,7 @@ def _init_state() -> None:
     st.session_state.setdefault("extracted_group_fields", [])
     st.session_state.setdefault("extracted_project_fields", set())
     st.session_state.setdefault("active_group_index", 0)
+    st.session_state.setdefault("group_section_widget_revision", 0)
 
 
 def _specification_sidebar() -> bool:
@@ -1323,6 +1324,7 @@ def _sync_group_widgets_from_group_data(groups: list[dict[str, Any]]) -> None:
                 value = group.get(field)
                 if value not in ("", None):
                     st.session_state[f"group_{index}_{field}"] = _widget_state_value(kind, value)
+    _refresh_group_section_widgets()
 
 
 def _widget_state_value(kind: str, value: Any) -> Any:
@@ -1411,20 +1413,26 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             section_names = list(FIELD_GROUPS.keys())
             completed_sections = _completed_sections(group)
             active_section_key = f"group_{index}_active_section"
-            stored_section = st.session_state.get(active_section_key)
-            if stored_section is not None:
-                normalized_section = _normalize_group_section_name(stored_section) or section_names[0]
-                if normalized_section != stored_section:
-                    st.session_state[active_section_key] = normalized_section
+            stored_section = _normalize_group_section_name(st.session_state.get(active_section_key)) or section_names[0]
+            st.session_state[active_section_key] = stored_section
+            section_widget_key = (
+                f"{active_section_key}_widget_{int(st.session_state.group_section_widget_revision)}"
+            )
+            widget_section = _normalize_group_section_name(st.session_state.get(section_widget_key))
+            if widget_section is None:
+                st.session_state[section_widget_key] = stored_section
+            elif widget_section != st.session_state.get(section_widget_key):
+                st.session_state[section_widget_key] = widget_section
             section = st.radio(
                 "Раздел параметров",
                 section_names,
                 horizontal=True,
                 label_visibility="collapsed",
-                key=active_section_key,
+                key=section_widget_key,
                 format_func=lambda name: _section_display_label(name, completed_sections),
             )
             section = _normalize_group_section_name(section) or section_names[0]
+            st.session_state[active_section_key] = section
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
             fields = FIELD_GROUPS[section]
             if section == "Двери":
@@ -1451,7 +1459,7 @@ def _add_group() -> None:
     st.session_state.group_count += 1
     st.session_state.prefill_groups.append({})
     st.session_state.group_drafts.append({})
-    st.session_state.active_group_index = new_index
+    _activate_group(new_index)
 
 
 def _copy_group(index: int) -> None:
@@ -1470,8 +1478,8 @@ def _copy_group(index: int) -> None:
     st.session_state.extracted_group_fields.insert(copy_index, extracted_fields)
     st.session_state.prefill_groups = [dict(group) for group in current_groups]
     st.session_state.group_count = len(current_groups)
-    _sync_group_widgets_from_group_data(current_groups)
     st.session_state.active_group_index = copy_index
+    _sync_group_widgets_from_group_data(current_groups)
 
 
 def _render_group_field_grid(
@@ -1603,8 +1611,21 @@ def _render_group_navigation(groups: list[dict[str, Any]]) -> None:
             button_type = "primary" if group_index == st.session_state.active_group_index else "secondary"
             st.markdown('<span class="group-nav-button-marker"></span>', unsafe_allow_html=True)
             if st.button(label, key=f"group_nav_{group_index}", type=button_type, use_container_width=True):
-                st.session_state.active_group_index = group_index
+                _activate_group(group_index)
                 st.rerun()
+
+
+def _activate_group(index: int) -> None:
+    st.session_state.active_group_index = index
+    _refresh_group_section_widgets()
+
+
+def _refresh_group_section_widgets() -> None:
+    revision = int(st.session_state.get("group_section_widget_revision", 0)) + 1
+    st.session_state.group_section_widget_revision = revision
+    for key in list(st.session_state.keys()):
+        if re.fullmatch(r"group_\d+_active_section_widget_\d+", str(key)):
+            st.session_state.pop(key, None)
 
 
 def _group_navigation_items(groups: list[dict[str, Any]]) -> list[tuple[int, str]]:
