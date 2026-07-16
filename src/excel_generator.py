@@ -146,9 +146,7 @@ VISUAL_SUMMARY_EQUIPMENT_LABEL_ROW_HEIGHT = 56.25
 VISUAL_SUMMARY_EQUIPMENT_VALUE_ROW_HEIGHT = (
     VISUAL_SUMMARY_EQUIPMENT_ROW_HEIGHT - VISUAL_SUMMARY_EQUIPMENT_LABEL_ROW_HEIGHT
 )
-QUESTIONNAIRE_PROJECT_ROW_HEIGHT = 18.0
-QUESTIONNAIRE_PROJECT_TWO_LINE_ROW_HEIGHT = 36.0
-QUESTIONNAIRE_PROJECT_DETAILS_ROW_HEIGHT = 54.0
+QUESTIONNAIRE_PROJECT_ROW_HEIGHT = 58.0
 QUESTIONNAIRE_SECTION_ROW_HEIGHT = 15.6
 QUESTIONNAIRE_FACTORY_ROW_HEIGHT = 18.0
 QUESTIONNAIRE_HEADER_FILL_COLOR = Color(theme=2, tint=-0.0999786370433668)
@@ -489,14 +487,7 @@ def _last_meaningful_questionnaire_row(worksheet: Worksheet, last_col: int) -> i
 
 
 def _style_questionnaire_project_row(worksheet: Worksheet, row: int, last_col: int, border: Border) -> None:
-    project_header = str(worksheet.cell(row=row, column=1).value or "")
-    project_header_lines = project_header.count("\n") + 1
-    if project_header_lines >= 3:
-        worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_DETAILS_ROW_HEIGHT
-    elif project_header_lines == 2:
-        worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_TWO_LINE_ROW_HEIGHT
-    else:
-        worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_ROW_HEIGHT
+    worksheet.row_dimensions[row].height = QUESTIONNAIRE_PROJECT_ROW_HEIGHT
     fill = PatternFill("solid", fgColor=QUESTIONNAIRE_HEADER_FILL_COLOR)
     for column in range(1, last_col + 1):
         cell = worksheet.cell(row=row, column=column)

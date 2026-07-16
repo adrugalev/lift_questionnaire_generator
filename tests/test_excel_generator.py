@@ -57,26 +57,28 @@ def test_door_model_is_written_inside_cabin_doors_section(template_path, mapping
     ws = load_workbook(BytesIO(content)).active
 
     assert ws["A26"].value.strip() == "Двери кабины"
-    assert ws["A29"].value == "Модель дверей"
-    assert ws["B29"].value == "门机型号"
-    assert ws["C29"].value == "Fermator Premium"
+    assert ws["A27"].value == "Модель дверей"
+    assert ws["B27"].value == "门机型号"
+    assert ws["C27"].value == "Fermator Premium"
+    assert ws["A28"].value == "Тип открывания дверей"
+    assert ws["A29"].value == "Облицовка"
     assert ws["A30"].value == "Этажные двери"
-    assert ws["A29"].fill.fgColor.type == ws["A28"].fill.fgColor.type
-    assert ws["A29"].border.bottom.style == ws["A28"].border.bottom.style
+    assert ws["A27"].fill.fgColor.type == ws["A28"].fill.fgColor.type
+    assert ws["A27"].border.bottom.style == ws["A28"].border.bottom.style
 
 
 def test_door_model_defaults_to_nbsl_in_questionnaire(template_path, mapping_path):
     content = generate_questionnaire_xlsx(template_path, _questionnaire(1), mapping_path)
     ws = load_workbook(BytesIO(content)).active
 
-    assert ws["C29"].value == "NBSL"
+    assert ws["C27"].value == "NBSL"
 
 
 def test_questionnaire_reference_header_styles_are_applied(template_path, mapping_path):
     content = generate_questionnaire_xlsx(template_path, _questionnaire(1), mapping_path)
     ws = load_workbook(BytesIO(content)).active
 
-    assert ws.row_dimensions[1].height == pytest.approx(18)
+    assert ws.row_dimensions[1].height == pytest.approx(58)
     assert ws["A1"].font.sz == 11
     assert not ws["A1"].font.bold
     assert ws["A1"].font.color.rgb == "FF002060"
@@ -210,7 +212,7 @@ def test_preparer_is_written_below_project_name(template_path, mapping_path):
     assert all(isinstance(part, TextBlock) for part in rich_header)
     assert [part.font.b for part in rich_header] == [True, False, True, False, True, False]
     assert all(part.font.sz == pytest.approx(11) for part in rich_header)
-    assert questionnaire_ws.row_dimensions[1].height == pytest.approx(54)
+    assert questionnaire_ws.row_dimensions[1].height == pytest.approx(58)
     assert questionnaire_ws["A1"].alignment.wrap_text
     assert summary_ws["A2"].value == (
         "Проект: Тестовый проект\n"
@@ -329,7 +331,7 @@ def test_unselected_finishes_and_materials_are_blank_in_questionnaire(template_p
     assert ws["C22"].value is None
     assert ws["C23"].value is None
     assert ws["C24"].value == "Нет"
-    assert ws["C28"].value is None
+    assert ws["C29"].value is None
     assert ws["C33"].value is None
     assert ws["C34"].value is None
     assert ws["C38"].value is None
@@ -356,7 +358,7 @@ def test_selected_finish_articles_are_written_to_questionnaire(template_path, ma
 
     assert ws["C18"].value == "Шлифованная нержавеющая сталь EX-HS01"
     assert ws["C21"].value == "Под отделку"
-    assert ws["C28"].value == "Цветное стекло CG-04"
+    assert ws["C29"].value == "Цветное стекло CG-04"
     assert ws["C33"].value == "Покрытие под дерево E-05"
 
 

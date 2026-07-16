@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-APP_VERSION_DATE = "16.07.2026"
+APP_VERSION_DATE = "17.07.2026"
 # Дневной счетчик версии: при смене APP_VERSION_DATE начинается с 1.
-APP_VERSION_REVISION = 45
+APP_VERSION_REVISION = 2
 
 
 def app_version_label() -> str:
