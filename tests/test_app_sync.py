@@ -757,6 +757,30 @@ def test_lift_team_surnames_match_reporting_documents_directory() -> None:
     )
 
 
+def test_lift_team_sidebar_uses_short_preparer_label(monkeypatch) -> None:
+    rendered: list[str] = []
+
+    class FakeContainer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    monkeypatch.setattr(app.st, "session_state", FakeSessionState({"prefill_project": {}}))
+    monkeypatch.setattr(app.st.sidebar, "container", lambda **kwargs: FakeContainer())
+    monkeypatch.setattr(
+        app.st,
+        "markdown",
+        lambda body, **kwargs: rendered.append(body),
+    )
+    monkeypatch.setattr(app.st, "pills", lambda *args, **kwargs: None)
+
+    app._render_lift_team_sidebar()
+
+    assert rendered == ['<div class="lift-team-sidebar-label">Заполняет:</div>']
+
+
 def test_lift_summary_breakdown_aggregates_matching_specs() -> None:
     assert app._lift_summary_breakdown([
         {"quantity": 1, "speed_ms": 2.5, "capacity_kg": 1000, "stops": 10},

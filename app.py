@@ -1137,18 +1137,11 @@ def _filled_field_styles_css() -> str:
             margin-top: 0.28rem;
         }
 
-        .lift-team-sidebar-title {
+        .lift-team-sidebar-label {
             color: #313340;
             font-size: 1rem;
             font-weight: 700;
             line-height: 1.2;
-            margin-bottom: 0.18rem;
-        }
-
-        .lift-team-sidebar-hint {
-            color: #6b7280;
-            font-size: 0.75rem;
-            line-height: 1.25;
             margin-bottom: 0.35rem;
         }
 
@@ -1258,10 +1251,7 @@ def _render_lift_team_sidebar() -> str | None:
 
     with st.sidebar.container(border=True):
         st.markdown(
-            """
-            <div class="lift-team-sidebar-title">Команда лифтового направления</div>
-            <div class="lift-team-sidebar-hint">Кто заполняет опросный лист</div>
-            """,
+            '<div class="lift-team-sidebar-label">Заполняет:</div>',
             unsafe_allow_html=True,
         )
         return st.pills(
