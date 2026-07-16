@@ -1355,6 +1355,7 @@ def _sync_group_widgets_from_prefill(groups: list[dict[str, Any]]) -> None:
 
 
 def _sync_group_widgets_from_group_data(groups: list[dict[str, Any]]) -> None:
+    groups = [_group_with_lift_name_range(group) for group in groups]
     for key in list(st.session_state.keys()):
         key_parts = key.split("_", 2)
         if len(key_parts) == 3 and key_parts[0] == "group" and key_parts[1].isdigit():
@@ -1419,6 +1420,7 @@ def _project_block() -> dict[str, Any]:
 
 def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     _normalize_group_lists()
+    _sync_group_lift_name_ranges_before_render()
     _clamp_active_group_selection()
 
     header_cols = st.columns([1.35, 2.35, 2.15, 4.15])
@@ -1802,7 +1804,37 @@ def _renumber_following_group_lift_names(groups: list[dict[str, Any]], anchor_in
         next_name = _next_group_lift_name(previous.get("lift_name"), previous.get("quantity"))
         if next_name is None:
             break
-        groups[index]["lift_name"] = next_name
+        groups[index]["lift_name"] = _lift_name_for_quantity(next_name, groups[index].get("quantity"))
+
+
+def _group_with_lift_name_range(group: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(group)
+    lift_name = _lift_name_for_quantity(normalized.get("lift_name"), normalized.get("quantity"))
+    if lift_name:
+        normalized["lift_name"] = lift_name
+    return normalized
+
+
+def _sync_group_lift_name_ranges_before_render() -> None:
+    for index in range(st.session_state.group_count):
+        prefill = st.session_state.prefill_groups[index]
+        draft = st.session_state.group_drafts[index]
+        lift_name_key = f"group_{index}_lift_name"
+        quantity_key = f"group_{index}_quantity"
+        lift_name = st.session_state.get(
+            lift_name_key,
+            draft.get("lift_name", prefill.get("lift_name")),
+        )
+        quantity = st.session_state.get(
+            quantity_key,
+            draft.get("quantity", prefill.get("quantity")),
+        )
+        updated_lift_name = _lift_name_for_quantity(lift_name, quantity)
+        if not updated_lift_name:
+            continue
+        prefill["lift_name"] = updated_lift_name
+        draft["lift_name"] = updated_lift_name
+        st.session_state[lift_name_key] = updated_lift_name
 
 
 def _renumber_following_group_lift_names_in_state(anchor_index: int) -> None:

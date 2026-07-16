@@ -707,6 +707,37 @@ def test_lift_name_range_updates_when_quantity_changes() -> None:
     assert app._lift_name_for_quantity("Л-04А", 3) == "Л-04А-Л-06А"
 
 
+def test_lift_name_field_is_normalized_to_range_before_render(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 3,
+        "prefill_groups": [
+            {"lift_name": "Л1", "quantity": 3},
+            {"lift_name": "Л4", "quantity": 2},
+            {"lift_name": "Л6", "quantity": 3},
+        ],
+        "group_drafts": [{}, {}, {}],
+        "extracted_group_fields": [set(), set(), set()],
+        "group_0_lift_name": "Л1",
+        "group_0_quantity": "3",
+        "group_1_lift_name": "Л4",
+        "group_1_quantity": "2",
+        "group_2_lift_name": "Л6",
+        "group_2_quantity": "3",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._sync_group_lift_name_ranges_before_render()
+
+    assert session_state["group_0_lift_name"] == "Л1-Л3"
+    assert session_state["group_1_lift_name"] == "Л4-Л5"
+    assert session_state["group_2_lift_name"] == "Л6-Л8"
+    assert [group["lift_name"] for group in session_state.prefill_groups] == [
+        "Л1-Л3",
+        "Л4-Л5",
+        "Л6-Л8",
+    ]
+
+
 def test_group_display_label_preserves_number_padding() -> None:
     assert app._format_group_display_label("Л01", 3) == "Л01-Л03"
 
@@ -721,7 +752,7 @@ def test_following_group_lift_names_are_renumbered_from_anchor() -> None:
 
     app._renumber_following_group_lift_names(groups, 0)
 
-    assert [group["lift_name"] for group in groups] == ["Л1", "Л4", "Л7", "Л9"]
+    assert [group["lift_name"] for group in groups] == ["Л1", "Л4-Л6", "Л7-Л8", "Л9"]
 
 
 def test_next_group_lift_name_preserves_prefix_suffix_and_zeroes() -> None:
@@ -748,9 +779,9 @@ def test_editing_lift_name_renumbers_all_following_groups(monkeypatch) -> None:
 
     assert session_state["group_1_lift_name"] == "Л4-Л6"
     assert session_state.prefill_groups[1]["lift_name"] == "Л4-Л6"
-    assert session_state["group_2_lift_name"] == "Л7"
+    assert session_state["group_2_lift_name"] == "Л7-Л8"
     assert session_state["group_3_lift_name"] == "Л9"
-    assert session_state.prefill_groups[2]["lift_name"] == "Л7"
+    assert session_state.prefill_groups[2]["lift_name"] == "Л7-Л8"
     assert session_state.prefill_groups[3]["lift_name"] == "Л9"
 
 
@@ -1696,7 +1727,7 @@ def test_copy_group_inserts_full_copy_after_selected_and_activates_it(monkeypatc
     original_draft.pop("lift_name")
     assert copied_draft == original_draft
     assert session_state["group_1_section"] == "A"
-    assert session_state["group_1_lift_name"] == "Л3"
+    assert session_state["group_1_lift_name"] == "Л3-Л4"
     assert session_state["group_1_quantity"] == "2"
     assert session_state["group_1_capacity_kg"] == "1000"
     assert session_state["group_1_cop_type"] == "EX-AC99A"
@@ -1844,7 +1875,7 @@ def test_delete_middle_group_renumbers_following_lifts(monkeypatch) -> None:
     app._delete_group(1)
 
     assert session_state["group_count"] == 2
-    assert session_state["group_0_lift_name"] == "Л1"
+    assert session_state["group_0_lift_name"] == "Л1-Л2"
     assert session_state["group_1_lift_name"] == "Л3"
     assert session_state.prefill_groups[1]["lift_name"] == "Л3"
 
@@ -1866,7 +1897,7 @@ def test_delete_first_group_restarts_numbering_from_deleted_name(monkeypatch) ->
     app._delete_group(0)
 
     assert session_state["group_count"] == 2
-    assert session_state["group_0_lift_name"] == "Л1"
+    assert session_state["group_0_lift_name"] == "Л1-Л2"
     assert session_state["group_1_lift_name"] == "Л3"
 
 
