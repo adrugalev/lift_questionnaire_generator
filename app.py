@@ -1405,52 +1405,52 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     nav_groups = [_collect_group_from_state(index, _group_defaults(index)) for index in range(st.session_state.group_count)]
     _render_group_navigation(nav_groups)
 
-    groups: list[dict[str, Any]] = []
-    for index in range(st.session_state.group_count):
-        defaults = _group_defaults(index)
-        with st.expander(_group_display_label(index), expanded=index == st.session_state.active_group_index):
-            group = _collect_group_from_state(index, defaults)
-            section_names = list(FIELD_GROUPS.keys())
-            completed_sections = _completed_sections(group)
-            active_section_key = f"group_{index}_active_section"
-            stored_section = _normalize_group_section_name(st.session_state.get(active_section_key)) or section_names[0]
-            st.session_state[active_section_key] = stored_section
-            section_widget_key = (
-                f"{active_section_key}_widget_{int(st.session_state.group_section_widget_revision)}"
-            )
-            widget_section = _normalize_group_section_name(st.session_state.get(section_widget_key))
-            if widget_section is None:
-                st.session_state[section_widget_key] = stored_section
-            elif widget_section != st.session_state.get(section_widget_key):
-                st.session_state[section_widget_key] = widget_section
-            section = st.radio(
-                "Раздел параметров",
-                section_names,
-                horizontal=True,
-                label_visibility="collapsed",
-                key=section_widget_key,
-                format_func=lambda name: _section_display_label(name, completed_sections),
-            )
-            section = _normalize_group_section_name(section) or section_names[0]
-            st.session_state[active_section_key] = section
+    groups = nav_groups
+    index = int(st.session_state.active_group_index)
+    defaults = _group_defaults(index)
+    group = groups[index]
+    with st.expander(_group_display_label(index), expanded=True):
+        section_names = list(FIELD_GROUPS.keys())
+        completed_sections = _completed_sections(group)
+        active_section_key = f"group_{index}_active_section"
+        stored_section = _normalize_group_section_name(st.session_state.get(active_section_key)) or section_names[0]
+        st.session_state[active_section_key] = stored_section
+        section_widget_key = (
+            f"{active_section_key}_widget_{int(st.session_state.group_section_widget_revision)}"
+        )
+        widget_section = _normalize_group_section_name(st.session_state.get(section_widget_key))
+        if widget_section is None:
+            st.session_state[section_widget_key] = stored_section
+        elif widget_section != st.session_state.get(section_widget_key):
+            st.session_state[section_widget_key] = widget_section
+        section = st.radio(
+            "Раздел параметров",
+            section_names,
+            horizontal=True,
+            label_visibility="collapsed",
+            key=section_widget_key,
+            format_func=lambda name: _section_display_label(name, completed_sections),
+        )
+        section = _normalize_group_section_name(section) or section_names[0]
+        st.session_state[active_section_key] = section
+        st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
+        fields = FIELD_GROUPS[section]
+        if section == "Двери":
+            upper_fields = [item for item in fields if item[0] not in DOOR_FINISH_FIELDS]
+            finish_fields = [item for item in fields if item[0] in DOOR_FINISH_FIELDS]
+            _render_group_field_grid(upper_fields, 2, group, defaults, options, index)
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
-            fields = FIELD_GROUPS[section]
-            if section == "Двери":
-                upper_fields = [item for item in fields if item[0] not in DOOR_FINISH_FIELDS]
-                finish_fields = [item for item in fields if item[0] in DOOR_FINISH_FIELDS]
-                _render_group_field_grid(upper_fields, 2, group, defaults, options, index)
-                st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
-                _render_group_field_grid(finish_fields, 2, group, defaults, options, index)
+            _render_group_field_grid(finish_fields, 2, group, defaults, options, index)
+        else:
+            has_visual_options = any(option_key in IMAGE_OPTION_DIRS for _, _, _, option_key in fields)
+            column_count = 2 if has_visual_options else 3 if len(fields) >= 8 else 2
+            if section == "Сигнализация":
+                _render_signalization_fields(fields, group, defaults, options, index)
             else:
-                has_visual_options = any(option_key in IMAGE_OPTION_DIRS for _, _, _, option_key in fields)
-                column_count = 2 if has_visual_options else 3 if len(fields) >= 8 else 2
-                if section == "Сигнализация":
-                    _render_signalization_fields(fields, group, defaults, options, index)
-                else:
-                    _render_group_field_grid(fields, column_count, group, defaults, options, index)
-                if section == "Сигнализация":
-                    _render_selected_image_previews(fields, group)
-            groups.append(group)
+                _render_group_field_grid(fields, column_count, group, defaults, options, index)
+            if section == "Сигнализация":
+                _render_selected_image_previews(fields, group)
+    groups[index] = group
     return groups
 
 
