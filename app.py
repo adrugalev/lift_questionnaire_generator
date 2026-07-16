@@ -1484,6 +1484,7 @@ def _copy_group(index: int) -> None:
     ]
     copy_index = index + 1
     current_groups.insert(copy_index, dict(current_groups[index]))
+    _renumber_following_group_lift_names(current_groups, index)
 
     extracted_fields = set(st.session_state.extracted_group_fields[index])
     st.session_state.extracted_group_fields.insert(copy_index, extracted_fields)
@@ -1724,6 +1725,48 @@ def _lift_name_range(lift_name: str, quantity: int) -> str | None:
     width = len(start_text) if start_text.startswith("0") else 0
     end_text = f"{end:0{width}d}" if width else str(end)
     return f"{prefix}{start_text}{suffix}-{prefix}{end_text}{suffix}"
+
+
+def _next_group_lift_name(lift_name: Any, quantity: Any) -> str | None:
+    text = str(lift_name or "").strip()
+    count = _parse_positive_int_silent(quantity)
+    if not text or count is None:
+        return None
+    match = re.match(r"^(.*?)(\d+)([^0-9–—-]*)", text)
+    if not match:
+        return None
+    prefix, start_text, suffix = match.groups()
+    next_number = int(start_text) + count
+    width = len(start_text) if start_text.startswith("0") else 0
+    next_text = f"{next_number:0{width}d}" if width else str(next_number)
+    return f"{prefix}{next_text}{suffix}"
+
+
+def _renumber_following_group_lift_names(groups: list[dict[str, Any]], anchor_index: int) -> None:
+    for index in range(anchor_index + 1, len(groups)):
+        previous = groups[index - 1]
+        next_name = _next_group_lift_name(previous.get("lift_name"), previous.get("quantity"))
+        if next_name is None:
+            break
+        groups[index]["lift_name"] = next_name
+
+
+def _renumber_following_group_lift_names_in_state(anchor_index: int) -> None:
+    _normalize_group_lists()
+    if anchor_index < 0 or anchor_index >= st.session_state.group_count:
+        return
+    groups = [
+        _collect_group_from_state(index, _group_defaults(index))
+        for index in range(st.session_state.group_count)
+    ]
+    _renumber_following_group_lift_names(groups, anchor_index)
+    for index in range(anchor_index + 1, len(groups)):
+        lift_name = groups[index].get("lift_name")
+        if lift_name in ("", None):
+            continue
+        _ensure_group_draft(index)["lift_name"] = lift_name
+        st.session_state.prefill_groups[index]["lift_name"] = lift_name
+        st.session_state[f"group_{index}_lift_name"] = lift_name
 
 
 def _completed_sections(group: dict[str, Any]) -> set[str]:
@@ -2473,6 +2516,8 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
     if field == "underground_floors":
         stops_value = st.session_state.get(f"group_{group_index}_stops", draft.get("stops"))
         _apply_stops_derived_fields(group_index, stops_value)
+    if field in {"lift_name", "quantity"}:
+        _renumber_following_group_lift_names_in_state(group_index)
 
 
 def _save_group_custom_value(group_index: int, field: str, key: str) -> None:
