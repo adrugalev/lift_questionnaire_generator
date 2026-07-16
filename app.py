@@ -1306,7 +1306,7 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     _normalize_group_lists()
     _clamp_active_group_selection()
 
-    header_cols = st.columns([1.35, 2.15, 4.15, 2.2])
+    header_cols = st.columns([1.35, 2.35, 2.15, 4.15])
     with header_cols[0]:
         st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
         if st.button("Добавить группу", use_container_width=True):
@@ -1314,10 +1314,15 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             st.rerun()
     with header_cols[1]:
         st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
+        if st.button("Копировать выбранную группу", use_container_width=True):
+            _copy_group(int(st.session_state.active_group_index))
+            st.rerun()
+    with header_cols[2]:
+        st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
         if st.button("Удалить выбранную группу", use_container_width=True):
             _delete_group(int(st.session_state.active_group_index))
             st.rerun()
-    with header_cols[2]:
+    with header_cols[3]:
         st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
         if st.button(
             "Перенести отделки и опции из выбранной группы",
@@ -1375,6 +1380,26 @@ def _add_group() -> None:
     st.session_state.prefill_groups.append({})
     st.session_state.group_drafts.append({})
     st.session_state.active_group_index = new_index
+
+
+def _copy_group(index: int) -> None:
+    _normalize_group_lists()
+    if index < 0 or index >= st.session_state.group_count:
+        return
+
+    current_groups = [
+        _collect_group_from_state(group_index, _group_defaults(group_index))
+        for group_index in range(st.session_state.group_count)
+    ]
+    copy_index = index + 1
+    current_groups.insert(copy_index, dict(current_groups[index]))
+
+    extracted_fields = set(st.session_state.extracted_group_fields[index])
+    st.session_state.extracted_group_fields.insert(copy_index, extracted_fields)
+    st.session_state.prefill_groups = [dict(group) for group in current_groups]
+    st.session_state.group_count = len(current_groups)
+    _sync_group_widgets_from_group_data(current_groups)
+    st.session_state.active_group_index = copy_index
 
 
 def _render_group_field_grid(

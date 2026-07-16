@@ -1248,6 +1248,56 @@ def test_add_group_makes_new_group_active(monkeypatch) -> None:
     assert session_state["active_group_index"] == 1
 
 
+def test_copy_group_inserts_full_copy_after_selected_and_activates_it(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 2,
+        "prefill_groups": [
+            {
+                "section": "A",
+                "lift_name": "Л1",
+                "quantity": 2,
+                "capacity_kg": 1000,
+                "cop_type": "EX-AC99A",
+                "option_ard": "ДА",
+            },
+            {"section": "B", "lift_name": "Л3", "quantity": 1},
+        ],
+        "group_drafts": [{}, {}],
+        "extracted_group_fields": [{"section", "lift_name"}, {"section"}],
+        "active_group_index": 0,
+        "group_0_section": "A",
+        "group_0_lift_name": "Л1",
+        "group_0_quantity": "2",
+        "group_0_capacity_kg": "1000",
+        "group_0_cop_type": "EX-AC99A",
+        "group_0_option_ard": True,
+        "group_1_section": "B",
+        "group_1_lift_name": "Л3",
+        "group_1_quantity": "1",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._copy_group(0)
+
+    assert session_state["group_count"] == 3
+    assert session_state["active_group_index"] == 1
+    assert session_state["prefill_groups"][1] == session_state["prefill_groups"][0]
+    assert session_state["group_drafts"][1] == session_state["group_drafts"][0]
+    assert session_state["group_1_section"] == "A"
+    assert session_state["group_1_lift_name"] == "Л1"
+    assert session_state["group_1_quantity"] == "2"
+    assert session_state["group_1_capacity_kg"] == "1000"
+    assert session_state["group_1_cop_type"] == "EX-AC99A"
+    assert session_state["group_1_option_ard"] is True
+    assert session_state["group_2_section"] == "B"
+    assert session_state["extracted_group_fields"] == [
+        {"section", "lift_name"},
+        {"section", "lift_name"},
+        {"section"},
+    ]
+    assert session_state["extracted_group_fields"][1] is not session_state["extracted_group_fields"][0]
+
+
 def test_mgn_attention_warnings_are_grouped_by_lift_labels() -> None:
     questionnaire = Questionnaire(
         lift_groups=[
