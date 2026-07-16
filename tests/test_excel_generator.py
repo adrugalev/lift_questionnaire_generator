@@ -105,6 +105,25 @@ def test_visual_lift_name_uses_range_for_multi_lift_group():
     assert excel_generator._visual_lift_name("Л1-Л3", 3) == "Л1-Л3"
 
 
+def test_visual_group_title_includes_capacity() -> None:
+    group = LiftGroup(section="Секция 1", lift_name="Л1", quantity=2, capacity_kg=1000)
+
+    assert excel_generator._visual_group_title(1, group) == "Л1-Л2 (Секция 1, 2 лифта, 1000 кг)"
+
+
+def test_visual_summary_uses_full_control_panel_and_call_post_material_labels() -> None:
+    labels_by_field = {
+        field_name: label
+        for field_name, label, _ in excel_generator.EXCEL_MATERIAL_SUMMARY_FIELDS
+    }
+
+    assert labels_by_field["cop_finish"] == "Материал приказной панели"
+    assert (
+        labels_by_field["other_floors_lop_finish"]
+        == "Материал вызывных постов на остальных этажах"
+    )
+
+
 def test_project_name_goes_to_header_and_sheet_title(template_path, mapping_path):
     content = generate_questionnaire_xlsx(template_path, _questionnaire(1), mapping_path)
     ws = load_workbook(BytesIO(content)).active
@@ -387,6 +406,7 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
                 section="Секция 1",
                 lift_name="Л1",
                 quantity=1,
+                capacity_kg=1000,
                 side_wall_finish="Шлифованная нержавеющая сталь EX-HS01",
                 main_floor_landing_door_finish="Шлифованная нержавеющая сталь EX-HS01",
                 cop_type="EX-AC99A",
@@ -405,7 +425,7 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert "Саммэри материалов и оборудования" not in questionnaire_values
     assert "Саммэри материалов и оборудования" in values
     assert "Проект: Тестовый проект" in values
-    assert "Л1 (Секция 1)" in values
+    assert "Л1 (Секция 1, 1000 кг)" in values
     assert "Материалы отделки" in values
     assert "Оборудование" in values
     assert "Боковые стены\nШлифованная нержавеющая сталь EX-HS01" in values
@@ -417,8 +437,10 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert ws["A1"].font.bold
     assert ws["A2"].font.sz == 12
     assert ws["A2"].font.bold
-    assert ws["A4"].font.sz == 12
+    assert ws["A4"].font.sz == 14
     assert ws["A4"].font.bold
+    assert ws["A4"].font.color.rgb == "00FFFFFF"
+    assert ws["A4"].fill.fgColor.rgb == "004472C4"
     assert ws["A5"].font.sz == 12
     assert ws["A5"].font.bold
     assert ws["B6"].font.sz == 12
@@ -429,7 +451,7 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert ws.column_dimensions["G"].width == pytest.approx(13)
     assert ws.row_dimensions[1].height == pytest.approx(25.95)
     assert ws.row_dimensions[2].height == pytest.approx(22.05)
-    assert ws.row_dimensions[4].height == pytest.approx(22.05)
+    assert ws.row_dimensions[4].height == pytest.approx(27)
     assert ws.row_dimensions[5].height == pytest.approx(19.95)
     assert ws.row_dimensions[6].height == pytest.approx(72)
     assert ws.row_dimensions[8].height == pytest.approx(118.05)

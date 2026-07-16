@@ -73,9 +73,13 @@ EXCEL_MATERIAL_SUMMARY_FIELDS = [
     ("cabin_door_finish", "Двери кабины", "finish"),
     ("main_floor_landing_door_finish", "Двери на основном посадочном этаже", "finish"),
     ("other_floors_landing_door_finish", "Двери на остальных этажах", "finish"),
-    ("cop_finish", "Материал панели", "signal_steel_finish"),
+    ("cop_finish", "Материал приказной панели", "signal_steel_finish"),
     ("main_floor_lop_finish", "Материал поста на основном посадочном этаже", "signal_steel_finish"),
-    ("other_floors_lop_finish", "Материал постов", "signal_steel_finish"),
+    (
+        "other_floors_lop_finish",
+        "Материал вызывных постов на остальных этажах",
+        "signal_steel_finish",
+    ),
 ]
 EXCEL_EQUIPMENT_SUMMARY_FIELDS = [
     ("handrail_type", "Поручень", "handrail_type"),
@@ -117,7 +121,7 @@ EMU_PER_PIXEL = 9525
 VISUAL_SUMMARY_BODY_FONT_SIZE = 12
 VISUAL_SUMMARY_TITLE_FONT_SIZE = 14
 VISUAL_SUMMARY_PROJECT_FONT_SIZE = 12
-VISUAL_SUMMARY_GROUP_FONT_SIZE = 12
+VISUAL_SUMMARY_GROUP_FONT_SIZE = 14
 VISUAL_SUMMARY_SECTION_FONT_SIZE = 12
 QUESTIONNAIRE_RUSSIAN_COLUMN_WIDTH = 52.44140625
 QUESTIONNAIRE_CHINESE_COLUMN_WIDTH = 31.33203125
@@ -126,6 +130,7 @@ QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT = 14.4
 QUESTIONNAIRE_WRAPPED_ROW_HEIGHT = 28.8
 VISUAL_SUMMARY_TITLE_ROW_HEIGHT = 25.95
 VISUAL_SUMMARY_HEADER_ROW_HEIGHT = 22.05
+VISUAL_SUMMARY_GROUP_ROW_HEIGHT = 27.0
 VISUAL_SUMMARY_SECTION_ROW_HEIGHT = 19.95
 VISUAL_SUMMARY_MATERIAL_ROW_HEIGHT = 72.0
 VISUAL_SUMMARY_EQUIPMENT_ROW_HEIGHT = 118.05
@@ -585,10 +590,10 @@ def _write_visual_group_title(worksheet: Worksheet, row: int, group_index: int, 
     worksheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=8)
     cell = worksheet.cell(row=row, column=1)
     cell.value = _visual_group_title(group_index, group)
-    cell.font = Font(bold=True, size=VISUAL_SUMMARY_GROUP_FONT_SIZE, color="334155")
-    cell.fill = PatternFill("solid", fgColor="F8FAFC")
+    cell.font = Font(bold=True, size=VISUAL_SUMMARY_GROUP_FONT_SIZE, color="FFFFFF")
+    cell.fill = PatternFill("solid", fgColor="4472C4")
     cell.alignment = Alignment(horizontal="left", vertical="center")
-    worksheet.row_dimensions[row].height = VISUAL_SUMMARY_HEADER_ROW_HEIGHT
+    worksheet.row_dimensions[row].height = VISUAL_SUMMARY_GROUP_ROW_HEIGHT
 
 
 def _write_visual_section_title(worksheet: Worksheet, row: int, title: str) -> None:
@@ -726,10 +731,20 @@ def _visual_group_title(group_index: int, group: Any) -> str:
     lift_name = _visual_lift_name(getattr(group, "lift_name", None), getattr(group, "quantity", None))
     section = str(getattr(group, "section", "") or "").strip()
     quantity = getattr(group, "quantity", None)
-    quantity_text = f", {quantity} лифта" if isinstance(quantity, int) and quantity > 1 else ""
-    if lift_name and section:
-        return f"{lift_name} ({section}{quantity_text})"
-    return lift_name or section or f"Группа лифтов {group_index}"
+    capacity = getattr(group, "capacity_kg", None)
+    details = [section] if section else []
+    if isinstance(quantity, int) and quantity > 1:
+        details.append(f"{quantity} лифта")
+    if isinstance(capacity, int) and capacity > 0:
+        details.append(f"{capacity} кг")
+
+    if lift_name:
+        return f"{lift_name} ({', '.join(details)})" if details else lift_name
+    if section:
+        extra_details = details[1:]
+        return f"{section} ({', '.join(extra_details)})" if extra_details else section
+    fallback = f"Группа лифтов {group_index}"
+    return f"{fallback} ({', '.join(details)})" if details else fallback
 
 
 def _visual_lift_name(lift_name: Any, quantity: Any) -> str:
