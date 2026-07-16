@@ -1574,6 +1574,49 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
     assert "group_2_section" not in session_state
 
 
+def test_delete_middle_group_renumbers_following_lifts(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 3,
+        "prefill_groups": [
+            {"lift_name": "Л1", "quantity": 2},
+            {"lift_name": "Л3", "quantity": 2},
+            {"lift_name": "Л5", "quantity": 1},
+        ],
+        "group_drafts": [{}, {}, {}],
+        "extracted_group_fields": [set(), set(), set()],
+        "active_group_index": 1,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._delete_group(1)
+
+    assert session_state["group_count"] == 2
+    assert session_state["group_0_lift_name"] == "Л1"
+    assert session_state["group_1_lift_name"] == "Л3"
+    assert session_state.prefill_groups[1]["lift_name"] == "Л3"
+
+
+def test_delete_first_group_restarts_numbering_from_deleted_name(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 3,
+        "prefill_groups": [
+            {"lift_name": "Л1", "quantity": 2},
+            {"lift_name": "Л3", "quantity": 2},
+            {"lift_name": "Л5", "quantity": 1},
+        ],
+        "group_drafts": [{}, {}, {}],
+        "extracted_group_fields": [set(), set(), set()],
+        "active_group_index": 0,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._delete_group(0)
+
+    assert session_state["group_count"] == 2
+    assert session_state["group_0_lift_name"] == "Л1"
+    assert session_state["group_1_lift_name"] == "Л3"
+
+
 def test_delete_only_group_clears_it(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_count": 1,

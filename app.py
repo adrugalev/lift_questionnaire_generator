@@ -1889,9 +1889,20 @@ def _delete_group(index: int) -> None:
         return
 
     current_groups = [_collect_group_from_state(i, _group_defaults(i)) for i in range(st.session_state.group_count)]
+    deleted_lift_name = current_groups[index].get("lift_name")
     current_groups.pop(index)
     st.session_state.prefill_groups.pop(index)
     st.session_state.extracted_group_fields.pop(index)
+
+    if index < len(current_groups) and deleted_lift_name not in ("", None):
+        current_groups[index]["lift_name"] = deleted_lift_name
+        _renumber_following_group_lift_names(current_groups, index)
+    elif index > 0:
+        _renumber_following_group_lift_names(current_groups, index - 1)
+    for group_index in range(index, len(current_groups)):
+        lift_name = current_groups[group_index].get("lift_name")
+        if lift_name not in ("", None):
+            st.session_state.prefill_groups[group_index]["lift_name"] = lift_name
 
     st.session_state.group_count = len(current_groups)
     _sync_group_widgets_from_group_data(current_groups)
