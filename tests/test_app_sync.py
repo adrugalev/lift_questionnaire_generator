@@ -652,7 +652,27 @@ def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
         "project_name": "Проект из ТЗ",
         "group_count": 3,
         "lift_count": 5,
+        "lift_breakdown": [],
     }
+
+
+def test_lift_summary_breakdown_aggregates_matching_specs() -> None:
+    assert app._lift_summary_breakdown([
+        {"quantity": 1, "speed_ms": 2.5, "capacity_kg": 1000, "stops": 10},
+        {"quantity": 1, "speed_ms": "2,5", "capacity_kg": "1000", "stops": "10"},
+        {"quantity": 4, "speed_ms": 1.6, "capacity_kg": 630, "stops": 7},
+    ]) == [
+        "2 лифта — 2,5 м/с, 1000 кг, 10 ост.",
+        "4 лифта — 1,6 м/с, 630 кг, 7 ост.",
+    ]
+
+
+def test_lift_noun_uses_russian_quantity_forms() -> None:
+    assert app._lift_noun(1) == "лифт"
+    assert app._lift_noun(2) == "лифта"
+    assert app._lift_noun(5) == "лифтов"
+    assert app._lift_noun(11) == "лифтов"
+    assert app._lift_noun(22) == "лифта"
 
 
 def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
@@ -660,7 +680,12 @@ def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
     monkeypatch.setattr(
         app,
         "_project_summary_from_state",
-        lambda: {"project_name": "Тест", "group_count": 3, "lift_count": 4},
+        lambda: {
+            "project_name": "Тест",
+            "group_count": 3,
+            "lift_count": 4,
+            "lift_breakdown": ["4 лифта — 1,6 м/с, 630 кг, 7 ост."],
+        },
     )
     monkeypatch.setattr(
         app.st.sidebar,
@@ -673,6 +698,7 @@ def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
     assert ">Лифты<" in rendered[0]
     assert ">Группы<" in rendered[0]
     assert "Лифтов в проекте" not in rendered[0]
+    assert "4 лифта — 1,6 м/с, 630 кг, 7 ост." in rendered[0]
 
 
 def test_clamp_active_group_selection_resets_old_text_label(monkeypatch) -> None:
@@ -702,12 +728,14 @@ def test_inline_thumbnail_css_fits_full_image() -> None:
     assert "object-fit: contain;" in app._filled_field_styles_css()
 
 
-def test_project_summary_metric_values_are_bottom_aligned() -> None:
+def test_project_summary_breakdown_uses_small_text_and_keeps_values_aligned() -> None:
     css = app._filled_field_styles_css()
 
     assert ".project-summary-metric {" in css
     assert "flex-direction: column;" in css
-    assert "margin-top: auto;" in css
+    assert "min-height: 1.15em;" in css
+    assert ".project-summary-breakdown {" in css
+    assert "font-size: 0.68rem;" in css
 
 
 def test_selected_image_card_html_contains_label_and_value(tmp_path) -> None:

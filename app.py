@@ -1087,7 +1087,7 @@ def _filled_field_styles_css() -> str:
         .project-summary-metrics {
             display: grid;
             gap: 0.55rem;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1.65fr 0.85fr;
         }
 
         .project-summary-metric {
@@ -1103,6 +1103,7 @@ def _filled_field_styles_css() -> str:
             display: block;
             font-size: 0.72rem;
             line-height: 1.15;
+            min-height: 1.15em;
         }
 
         .project-summary-metric-value {
@@ -1111,8 +1112,18 @@ def _filled_field_styles_css() -> str:
             font-size: 1.45rem;
             font-weight: 700;
             line-height: 1.15;
-            margin-top: auto;
-            padding-top: 0.18rem;
+            margin-top: 0.18rem;
+        }
+
+        .project-summary-breakdown {
+            color: #667085;
+            font-size: 0.68rem;
+            line-height: 1.35;
+            margin-top: 0.45rem;
+        }
+
+        .project-summary-breakdown-line + .project-summary-breakdown-line {
+            margin-top: 0.28rem;
         }
 
         </style>
@@ -1174,6 +1185,10 @@ def _specification_sidebar() -> bool:
 def _render_project_summary_sidebar() -> None:
     summary = _project_summary_from_state()
     project_name = html.escape(summary["project_name"] or "Название проекта не указано")
+    lift_breakdown = "".join(
+        f'<div class="project-summary-breakdown-line">{html.escape(line)}</div>'
+        for line in summary["lift_breakdown"]
+    )
     st.sidebar.markdown(
         f"""
         <div class="project-summary-card">
@@ -1183,6 +1198,7 @@ def _render_project_summary_sidebar() -> None:
                 <div class="project-summary-metric">
                     <span class="project-summary-metric-label">Лифты</span>
                     <span class="project-summary-metric-value">{summary["lift_count"]}</span>
+                    <div class="project-summary-breakdown">{lift_breakdown}</div>
                 </div>
                 <div class="project-summary-metric">
                     <span class="project-summary-metric-label">Группы</span>
@@ -1202,15 +1218,61 @@ def _project_summary_from_state() -> dict[str, Any]:
         st.session_state.get("project_project_name", prefill_project.get("project_name")) or ""
     ).strip()
     lift_count = 0
+    groups: list[dict[str, Any]] = []
     for index in range(group_count):
         defaults = _group_defaults(index)
         quantity = st.session_state.get(f"group_{index}_quantity", defaults.get("quantity"))
         lift_count += _parse_positive_int_silent(quantity) or 0
+        groups.append({
+            "quantity": quantity,
+            "speed_ms": st.session_state.get(f"group_{index}_speed_ms", defaults.get("speed_ms")),
+            "capacity_kg": st.session_state.get(
+                f"group_{index}_capacity_kg", defaults.get("capacity_kg")
+            ),
+            "stops": st.session_state.get(f"group_{index}_stops", defaults.get("stops")),
+        })
     return {
         "project_name": project_name,
         "group_count": group_count,
         "lift_count": lift_count,
+        "lift_breakdown": _lift_summary_breakdown(groups),
     }
+
+
+def _lift_summary_breakdown(groups: list[dict[str, Any]]) -> list[str]:
+    quantities_by_spec: dict[tuple[str, int | None, int | None], int] = {}
+    for group in groups:
+        quantity = _parse_positive_int_silent(group.get("quantity"))
+        if quantity is None:
+            continue
+        speed = _format_decimal_option(group.get("speed_ms")).replace(".", ",")
+        capacity = _parse_positive_int_silent(group.get("capacity_kg"))
+        stops = _parse_positive_int_silent(group.get("stops"))
+        if not any((speed, capacity, stops)):
+            continue
+        spec = (speed, capacity, stops)
+        quantities_by_spec[spec] = quantities_by_spec.get(spec, 0) + quantity
+
+    lines: list[str] = []
+    for (speed, capacity, stops), quantity in quantities_by_spec.items():
+        details: list[str] = []
+        if speed:
+            details.append(f"{speed} м/с")
+        if capacity is not None:
+            details.append(f"{capacity} кг")
+        if stops is not None:
+            details.append(f"{stops} ост.")
+        quantity_text = f"{quantity} {_lift_noun(quantity)}"
+        lines.append(f"{quantity_text} — {', '.join(details)}")
+    return lines
+
+
+def _lift_noun(quantity: int) -> str:
+    if quantity % 10 == 1 and quantity % 100 != 11:
+        return "лифт"
+    if quantity % 10 in {2, 3, 4} and quantity % 100 not in {12, 13, 14}:
+        return "лифта"
+    return "лифтов"
 
 
 def _apply_parse_result(result) -> None:
