@@ -1139,30 +1139,23 @@ def _filled_field_styles_css() -> str:
             margin-bottom: 0;
         }
 
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"],
-        section[data-testid="stSidebar"] div[data-testid="stPills"] {
-            padding-top: 1.25rem;
+        .lift-team-sidebar-gap {
+            height: 0.5rem;
         }
 
-        section[data-testid="stSidebar"] div[data-testid="stButtonGroup"] button,
-        section[data-testid="stSidebar"] div[data-testid="stPills"] button {
+        section[data-testid="stSidebar"] [class*="st-key-project_preparer_"] button {
+            background: #f5f7fa !important;
+            border: 1px solid #cbd1da !important;
+            border-radius: 999px !important;
+            box-shadow: none !important;
+            color: #1f2937 !important;
             font-size: 0.78rem !important;
             min-height: 2rem !important;
             padding: 0.25rem 0.65rem !important;
         }
 
-        section[data-testid="stSidebar"] button[kind="pillsActive"],
-        section[data-testid="stSidebar"] button[data-testid="stBaseButton-pillsActive"] {
-            background-color: #e8f5ed !important;
-            border: 1px solid #32a66a !important;
-            box-shadow: 0 0 0 0.15rem rgba(50, 166, 106, 0.22) !important;
-            color: #23784a !important;
-            outline: none !important;
-        }
-
-        section[data-testid="stSidebar"] button[kind="pillsActive"] p,
-        section[data-testid="stSidebar"] button[data-testid="stBaseButton-pillsActive"] p {
-            color: #23784a !important;
+        section[data-testid="stSidebar"] [class*="st-key-project_preparer_"] button p {
+            color: #1f2937 !important;
         }
 
         </style>
@@ -1213,25 +1206,75 @@ def _render_project_summary_sidebar() -> None:
 
 def _render_lift_team_sidebar() -> str | None:
     prefill_project = st.session_state.get("prefill_project", {})
-    prefilled_surname = prefill_project.get("prepared_by")
-    if (
-        "project_prepared_by" not in st.session_state
-        and prefilled_surname in LIFT_TEAM_SURNAMES
-    ):
-        st.session_state["project_prepared_by"] = prefilled_surname
+    prefilled_surname = _normalize_preparer_surname(prefill_project.get("prepared_by"))
+    selected_surname = _normalize_preparer_surname(
+        st.session_state.get("project_prepared_by", prefilled_surname)
+    )
+    if selected_surname:
+        st.session_state["project_prepared_by"] = selected_surname
 
     with st.sidebar.container(border=True):
+        selected_index = (
+            LIFT_TEAM_SURNAMES.index(selected_surname)
+            if selected_surname in LIFT_TEAM_SURNAMES
+            else None
+        )
+        selected_style = (
+            _selected_preparer_button_css(selected_index)
+            if selected_index is not None
+            else ""
+        )
         st.markdown(
-            '<div class="lift-team-sidebar-label">Заполняет:</div>',
+            '<div class="lift-team-sidebar-label">Заполняет:</div>'
+            '<div class="lift-team-sidebar-gap"></div>'
+            f"{selected_style}",
             unsafe_allow_html=True,
         )
-        return st.pills(
-            "Сотрудник",
-            LIFT_TEAM_SURNAMES,
-            selection_mode="single",
-            key="project_prepared_by",
-            label_visibility="collapsed",
-        )
+        button_columns = st.columns(2, gap="small")
+        clicked_surname = None
+        for index, surname in enumerate(LIFT_TEAM_SURNAMES):
+            with button_columns[index % 2]:
+                if st.button(
+                    surname,
+                    key=f"project_preparer_{index}",
+                    type="secondary",
+                    use_container_width=True,
+                ):
+                    clicked_surname = surname
+
+        if clicked_surname:
+            st.session_state["project_prepared_by"] = clicked_surname
+            st.rerun()
+        return selected_surname
+
+
+def _normalize_preparer_surname(value: Any) -> str | None:
+    surname = str(value or "").strip()
+    if surname == "Другалев":
+        surname = "Другалёв"
+    return surname if surname in LIFT_TEAM_SURNAMES else None
+
+
+def _selected_preparer_button_css(selected_index: int) -> str:
+    key_class = f"st-key-project_preparer_{selected_index}"
+    return f"""
+        <style>
+        section[data-testid="stSidebar"] .{key_class} button,
+        section[data-testid="stSidebar"] .{key_class} button:hover,
+        section[data-testid="stSidebar"] .{key_class} button:focus,
+        section[data-testid="stSidebar"] .{key_class} button:focus-visible {{
+            background: #e8f5ed !important;
+            border: 1px solid #32a66a !important;
+            box-shadow: 0 0 0 0.15rem rgba(50, 166, 106, 0.22) !important;
+            color: #23784a !important;
+            outline: none !important;
+        }}
+
+        section[data-testid="stSidebar"] .{key_class} button p {{
+            color: #23784a !important;
+        }}
+        </style>
+    """
 
 
 def _project_summary_from_state() -> dict[str, Any]:
@@ -1687,7 +1730,7 @@ def _format_group_display_label(lift_name: Any, quantity: Any, capacity_kg: Any 
     if not text:
         return None
     count = _parse_positive_int_silent(quantity)
-    label = text if count is None or count <= 1 else (_lift_name_range(text, count) or text)
+    label = _lift_name_for_quantity(text, count) if count is not None else text
     return _append_capacity_to_group_label(label, capacity_kg)
 
 
@@ -1707,17 +1750,26 @@ def _parse_positive_int_silent(value: Any) -> int | None:
 
 
 def _lift_name_range(lift_name: str, quantity: int) -> str | None:
-    if "-" in lift_name or "–" in lift_name:
-        return lift_name
-    match = re.match(r"^(.*?)(\d+)(\D*)$", lift_name.strip())
+    return _lift_name_for_quantity(lift_name, quantity)
+
+
+def _lift_name_for_quantity(lift_name: Any, quantity: Any) -> str:
+    text = str(lift_name or "").strip()
+    count = _parse_positive_int_silent(quantity)
+    if not text or count is None:
+        return text
+    match = re.match(r"^(.*?)(\d+)([^0-9–—-]*)", text)
     if not match:
-        return None
+        return text
     prefix, start_text, suffix = match.groups()
     start = int(start_text)
-    end = start + quantity - 1
+    start_label = f"{prefix}{start_text}{suffix}"
+    if count <= 1:
+        return start_label
+    end = start + count - 1
     width = len(start_text) if start_text.startswith("0") else 0
     end_text = f"{end:0{width}d}" if width else str(end)
-    return f"{prefix}{start_text}{suffix}-{prefix}{end_text}{suffix}"
+    return f"{start_label}-{prefix}{end_text}{suffix}"
 
 
 def _next_group_lift_name(lift_name: Any, quantity: Any) -> str | None:
@@ -1760,6 +1812,23 @@ def _renumber_following_group_lift_names_in_state(anchor_index: int) -> None:
         _ensure_group_draft(index)["lift_name"] = lift_name
         st.session_state.prefill_groups[index]["lift_name"] = lift_name
         st.session_state[f"group_{index}_lift_name"] = lift_name
+
+
+def _sync_group_lift_name_range_in_state(group_index: int) -> None:
+    _normalize_group_lists()
+    if group_index < 0 or group_index >= st.session_state.group_count:
+        return
+    defaults = _group_defaults(group_index)
+    lift_name_key = f"group_{group_index}_lift_name"
+    quantity_key = f"group_{group_index}_quantity"
+    lift_name = st.session_state.get(lift_name_key, defaults.get("lift_name"))
+    quantity = st.session_state.get(quantity_key, defaults.get("quantity"))
+    updated_lift_name = _lift_name_for_quantity(lift_name, quantity)
+    if not updated_lift_name:
+        return
+    _ensure_group_draft(group_index)["lift_name"] = updated_lift_name
+    st.session_state.prefill_groups[group_index]["lift_name"] = updated_lift_name
+    st.session_state[lift_name_key] = updated_lift_name
 
 
 def _completed_sections(group: dict[str, Any]) -> set[str]:
@@ -2521,6 +2590,7 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
         stops_value = st.session_state.get(f"group_{group_index}_stops", draft.get("stops"))
         _apply_stops_derived_fields(group_index, stops_value)
     if field in {"lift_name", "quantity"}:
+        _sync_group_lift_name_range_in_state(group_index)
         _renumber_following_group_lift_names_in_state(group_index)
 
 
@@ -2727,7 +2797,7 @@ def _render_mgn_attention_block(labels: list[str]) -> None:
 def _mgn_attention_text(labels: list[str]) -> str:
     group_reference = "этой группы" if len(labels) == 1 else "данных групп"
     return (
-        f"Для {group_reference} выбрана опция «Доступность МГН», поэтому не забудьте выбрать "
+        f"Для {group_reference} выбрана опция «Доступность МГН», не забудьте выбрать "
         "панель управления и вызывные посты со шрифтом Брайля."
     )
 

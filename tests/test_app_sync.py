@@ -683,6 +683,13 @@ def test_group_display_label_keeps_existing_range() -> None:
     assert app._format_group_display_label("Л1-Л3", 3) == "Л1-Л3"
 
 
+def test_lift_name_range_updates_when_quantity_changes() -> None:
+    assert app._lift_name_for_quantity("Л1", 3) == "Л1-Л3"
+    assert app._lift_name_for_quantity("Л1-Л3", 2) == "Л1-Л2"
+    assert app._lift_name_for_quantity("Л1-Л3", 1) == "Л1"
+    assert app._lift_name_for_quantity("Л-04А", 3) == "Л-04А-Л-06А"
+
+
 def test_group_display_label_preserves_number_padding() -> None:
     assert app._format_group_display_label("Л01", 3) == "Л01-Л03"
 
@@ -722,10 +729,37 @@ def test_editing_lift_name_renumbers_all_following_groups(monkeypatch) -> None:
 
     app._save_group_widget_value(1, "lift_name", "group_1_lift_name")
 
+    assert session_state["group_1_lift_name"] == "Л4-Л6"
+    assert session_state.prefill_groups[1]["lift_name"] == "Л4-Л6"
     assert session_state["group_2_lift_name"] == "Л7"
     assert session_state["group_3_lift_name"] == "Л9"
     assert session_state.prefill_groups[2]["lift_name"] == "Л7"
     assert session_state.prefill_groups[3]["lift_name"] == "Л9"
+
+
+def test_changing_quantity_updates_current_range_and_following_group(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 2,
+        "prefill_groups": [
+            {"lift_name": "Л1", "quantity": 1},
+            {"lift_name": "Л2", "quantity": 1},
+        ],
+        "group_drafts": [{}, {}],
+        "extracted_group_fields": [set(), set()],
+        "group_0_lift_name": "Л1",
+        "group_0_quantity": "3",
+        "group_1_lift_name": "Л2",
+        "group_1_quantity": "1",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._save_group_widget_value(0, "quantity", "group_0_quantity")
+
+    assert session_state["group_0_lift_name"] == "Л1-Л3"
+    assert session_state.prefill_groups[0]["lift_name"] == "Л1-Л3"
+    assert session_state.group_drafts[0]["lift_name"] == "Л1-Л3"
+    assert session_state["group_1_lift_name"] == "Л4"
+    assert session_state.prefill_groups[1]["lift_name"] == "Л4"
 
 
 def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
@@ -763,6 +797,7 @@ def test_customer_specification_upload_is_not_exposed() -> None:
 
 def test_lift_team_sidebar_uses_short_preparer_label(monkeypatch) -> None:
     rendered: list[str] = []
+    buttons: list[str] = []
 
     class FakeContainer:
         def __enter__(self):
@@ -778,24 +813,37 @@ def test_lift_team_sidebar_uses_short_preparer_label(monkeypatch) -> None:
         "markdown",
         lambda body, **kwargs: rendered.append(body),
     )
-    monkeypatch.setattr(app.st, "pills", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app.st, "columns", lambda *args, **kwargs: [FakeContainer(), FakeContainer()])
+    monkeypatch.setattr(
+        app.st,
+        "button",
+        lambda label, **kwargs: buttons.append(label) or False,
+    )
 
     app._render_lift_team_sidebar()
 
-    assert rendered == ['<div class="lift-team-sidebar-label">Заполняет:</div>']
+    assert len(rendered) == 1
+    assert '<div class="lift-team-sidebar-label">Заполняет:</div>' in rendered[0]
+    assert '<div class="lift-team-sidebar-gap"></div>' in rendered[0]
+    assert buttons == list(app.LIFT_TEAM_SURNAMES)
 
 
-def test_lift_team_sidebar_selected_pill_uses_green_style_and_larger_gap() -> None:
+def test_lift_team_sidebar_selected_button_uses_explicit_green_style() -> None:
     css = app._filled_field_styles_css()
+    selected_css = app._selected_preparer_button_css(1)
 
-    assert "padding-top: 1.25rem;" in css
-    assert 'div[data-testid="stButtonGroup"]' in css
-    assert 'div[data-testid="stPills"]' in css
-    assert 'section[data-testid="stSidebar"] button[kind="pillsActive"]' in css
-    assert 'button[data-testid="stBaseButton-pillsActive"]' in css
-    assert "background-color: #e8f5ed !important;" in css
-    assert "border: 1px solid #32a66a !important;" in css
-    assert "color: #23784a !important;" in css
+    assert ".lift-team-sidebar-gap" in css
+    assert '[class*="st-key-project_preparer_"] button' in css
+    assert "background: #f5f7fa !important;" in css
+    assert "border: 1px solid #cbd1da !important;" in css
+    assert ".st-key-project_preparer_1 button" in selected_css
+    assert "background: #e8f5ed !important;" in selected_css
+    assert "border: 1px solid #32a66a !important;" in selected_css
+    assert "color: #23784a !important;" in selected_css
+
+
+def test_legacy_preparer_surname_is_normalized_for_sidebar() -> None:
+    assert app._normalize_preparer_surname("Другалев") == "Другалёв"
 
 
 def test_lift_summary_breakdown_aggregates_matching_specs() -> None:
@@ -1633,11 +1681,11 @@ def test_mgn_attention_warnings_are_grouped_by_lift_labels() -> None:
 
 def test_mgn_attention_text_mentions_reason_for_one_or_multiple_groups() -> None:
     assert app._mgn_attention_text(["Л1"]) == (
-        "Для этой группы выбрана опция «Доступность МГН», поэтому не забудьте выбрать панель управления "
+        "Для этой группы выбрана опция «Доступность МГН», не забудьте выбрать панель управления "
         "и вызывные посты со шрифтом Брайля."
     )
     assert app._mgn_attention_text(["Л1", "Л2"]) == (
-        "Для данных групп выбрана опция «Доступность МГН», поэтому не забудьте выбрать панель управления "
+        "Для данных групп выбрана опция «Доступность МГН», не забудьте выбрать панель управления "
         "и вызывные посты со шрифтом Брайля."
     )
 

@@ -6,6 +6,7 @@ from io import BytesIO
 from zipfile import ZipFile
 
 import pytest
+from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl import load_workbook
 
 from src import excel_generator
@@ -45,8 +46,8 @@ def test_questionnaire_reference_header_styles_are_applied(template_path, mappin
     ws = load_workbook(BytesIO(content)).active
 
     assert ws.row_dimensions[1].height == pytest.approx(18)
-    assert ws["A1"].font.sz == 14
-    assert ws["A1"].font.bold
+    assert ws["A1"].font.sz == 11
+    assert not ws["A1"].font.bold
     assert ws["A1"].font.color.rgb == "FF002060"
     assert ws["A1"].fill.fgColor.type == "theme"
     assert ws["A1"].fill.fgColor.theme == 2
@@ -137,7 +138,8 @@ def test_project_name_goes_to_header_and_sheet_title(template_path, mapping_path
     ws = load_workbook(BytesIO(content)).active
     assert ws.title == "Тестовый проект"
     assert ws["A1"].value == "Проект: Тестовый проект"
-    assert ws["B1"].value == "项目：Тестовый проект"
+    assert ws["B1"].value == "项目"
+    assert ws["A1"].font.sz == pytest.approx(11)
     assert ws["C1"].value is None
 
 
@@ -159,24 +161,29 @@ def test_preparer_is_written_below_project_name(template_path, mapping_path):
 
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     workbook = load_workbook(BytesIO(content))
+    rich_workbook = load_workbook(BytesIO(content), rich_text=True)
     questionnaire_ws = workbook.active
+    rich_questionnaire_ws = rich_workbook.active
     summary_ws = workbook["Саммэри"]
 
     assert questionnaire_ws["A1"].value == (
         "Проект: Тестовый проект\n"
-        "Адрес объекта: г. Москва, ул. Примерная, д. 1\n"
+        "Адрес проекта: г. Москва, ул. Примерная, д. 1\n"
         "Заполнено: Другалёв"
     )
-    assert questionnaire_ws["B1"].value == (
-        "项目：Тестовый проект\n"
-        "项目地址：г. Москва, ул. Примерная, д. 1\n"
-        "填写人：Другалёв"
-    )
+    assert questionnaire_ws["B1"].value == "项目\n项目地址\n负责人"
+    assert questionnaire_ws["A1"].font.sz == pytest.approx(11)
+    assert questionnaire_ws["B1"].font.sz == pytest.approx(11)
+    rich_header = rich_questionnaire_ws["A1"].value
+    assert isinstance(rich_header, CellRichText)
+    assert all(isinstance(part, TextBlock) for part in rich_header)
+    assert [part.font.b for part in rich_header] == [True, False, True, False, True, False]
+    assert all(part.font.sz == pytest.approx(11) for part in rich_header)
     assert questionnaire_ws.row_dimensions[1].height == pytest.approx(54)
     assert questionnaire_ws["A1"].alignment.wrap_text
     assert summary_ws["A2"].value == (
         "Проект: Тестовый проект\n"
-        "Адрес объекта: г. Москва, ул. Примерная, д. 1\n"
+        "Адрес проекта: г. Москва, ул. Примерная, д. 1\n"
         "Заполнено: Другалёв"
     )
     assert summary_ws.row_dimensions[2].height == pytest.approx(60)

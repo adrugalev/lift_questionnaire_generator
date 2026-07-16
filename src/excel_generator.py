@@ -9,6 +9,8 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from openpyxl.cell.rich_text import CellRichText, TextBlock
+from openpyxl.cell.text import InlineFont
 from openpyxl.drawing.image import Image as ExcelImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
@@ -223,7 +225,11 @@ def generate_questionnaire_xlsx(
     project_header_zh = _project_header_text_zh(project_name, project_address, prepared_by)
     if project_header and "project_name" in project_rows:
         project_row = int(project_rows["project_name"])
-        worksheet.cell(row=project_row, column=1).value = project_header
+        worksheet.cell(row=project_row, column=1).value = _project_header_rich_text(
+            project_name,
+            project_address,
+            prepared_by,
+        )
         worksheet.cell(row=project_row, column=2).value = project_header_zh
     if project_name:
         worksheet.title = _worksheet_title(project_name)
@@ -283,10 +289,41 @@ def _project_header_text(
     if project_name:
         lines.append(f"Проект: {project_name}")
     if project_address:
-        lines.append(f"Адрес объекта: {project_address}")
+        lines.append(f"Адрес проекта: {project_address}")
     if prepared_by:
         lines.append(f"Заполнено: {prepared_by}")
     return "\n".join(lines)
+
+
+def _project_header_rich_text(
+    project_name: str | None,
+    project_address: str | None,
+    prepared_by: str | None,
+) -> CellRichText:
+    lines = [
+        ("Проект", project_name),
+        ("Адрес проекта", project_address),
+        ("Заполнено", prepared_by),
+    ]
+    visible_lines = [(label, value) for label, value in lines if value]
+    bold_font = InlineFont(
+        rFont="Calibri",
+        sz=11,
+        b=True,
+        color=QUESTIONNAIRE_PROJECT_FONT_COLOR,
+    )
+    regular_font = InlineFont(
+        rFont="Calibri",
+        sz=11,
+        b=False,
+        color=QUESTIONNAIRE_PROJECT_FONT_COLOR,
+    )
+    rich_parts: list[TextBlock] = []
+    for index, (label, value) in enumerate(visible_lines):
+        rich_parts.append(TextBlock(bold_font, label))
+        line_ending = "\n" if index < len(visible_lines) - 1 else ""
+        rich_parts.append(TextBlock(regular_font, f": {value}{line_ending}"))
+    return CellRichText(rich_parts)
 
 
 def _project_header_text_zh(
@@ -296,11 +333,11 @@ def _project_header_text_zh(
 ) -> str:
     lines: list[str] = []
     if project_name:
-        lines.append(f"项目：{project_name}")
+        lines.append("项目")
     if project_address:
-        lines.append(f"项目地址：{project_address}")
+        lines.append("项目地址")
     if prepared_by:
-        lines.append(f"填写人：{prepared_by}")
+        lines.append("负责人")
     return "\n".join(lines)
 
 
@@ -464,7 +501,7 @@ def _style_questionnaire_project_row(worksheet: Worksheet, row: int, last_col: i
         cell.border = border
         cell.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
         if column == 1:
-            cell.font = Font(name="Calibri", size=14, bold=True, color=QUESTIONNAIRE_PROJECT_FONT_COLOR)
+            cell.font = Font(name="Calibri", size=11, bold=False, color=QUESTIONNAIRE_PROJECT_FONT_COLOR)
         elif column == 2:
             cell.font = Font(name="Calibri", size=11, bold=True, color=QUESTIONNAIRE_PROJECT_FONT_COLOR)
         else:
