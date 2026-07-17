@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import html
+import json
 import random
 import re
 from datetime import date
@@ -25,6 +26,8 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_TEMPLATE = ROOT / "templates" / "questionnaire_template.xlsx"
 MAPPING_PATH = ROOT / "data" / "excel_mapping.json"
 OPTIONS_PATH = ROOT / "data" / "options.json"
+DRAFT_FILE_KIND = "epss_lift_questionnaire_draft"
+DRAFT_SCHEMA_VERSION = 1
 LIFT_TEAM_SURNAMES = (
     "Баранова",
     "Другалёв",
@@ -353,10 +356,10 @@ FIELD_GROUPS = {
         ("door_opening_type", "Тип открывания дверей", "select", "door_opening_type"),
         ("cabin_door_finish", "Облицовка дверей кабины", "select", "finish"),
         ("door_model", "Модель дверей", "select", "door_model"),
-        ("landing_door_height_mm", "Высота дверей, мм", "number", None),
+        ("landing_door_width_mm", "Ширина дверей, мм", "number", None),
         ("main_floor_landing_door_finish", "Облицовка на основном посадочном этаже", "select", "finish"),
         ("other_floors_landing_door_finish", "Облицовка на остальных этажах", "select", "finish"),
-        ("landing_door_width_mm", "Ширина дверей, мм", "number", None),
+        ("landing_door_height_mm", "Высота дверей, мм", "number", None),
         ("firefighter_mode", "Режим перевозки пожарных подразделений", "select", "yes_no"),
         ("fire_resistance", "Предел огнестойкости", "select", "fire_resistance"),
     ],
@@ -567,6 +570,7 @@ def main() -> None:
     _inject_filled_field_styles()
     options = OptionsManager(OPTIONS_PATH)
     _init_state()
+    _draft_restore_sidebar()
     st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
     _render_version_caption(options)
 
@@ -575,6 +579,7 @@ def main() -> None:
 
     project_data = _project_block()
     group_data = _groups_block(options)
+    _draft_download_sidebar(project_data, group_data)
 
     questionnaire = _build_questionnaire(project_data, group_data)
     if questionnaire:
@@ -1213,6 +1218,173 @@ def _render_project_summary_sidebar() -> None:
     )
 
 
+def _draft_restore_sidebar() -> None:
+    restored_notice = st.session_state.pop("draft_restore_notice", None)
+    with st.sidebar.container(border=True):
+        st.markdown("**Черновик заполнения**")
+        uploaded_file = st.file_uploader(
+            "Загрузить черновик",
+            type=["json"],
+            key="draft_upload",
+            label_visibility="collapsed",
+        )
+        if restored_notice:
+            st.success(restored_notice)
+        if uploaded_file is None:
+            return
+        content = uploaded_file.getvalue()
+        digest = str(hash(content))
+        if st.session_state.get("last_loaded_draft_digest") == digest:
+            return
+        try:
+            payload = json.loads(content.decode("utf-8-sig"))
+            _apply_draft_payload(payload)
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError) as exc:
+            st.error(f"Не удалось загрузить черновик: {exc}")
+            return
+        st.session_state.last_loaded_draft_digest = digest
+        st.session_state.draft_restore_notice = "Черновик загружен. Можно продолжать заполнение."
+        st.rerun()
+
+
+def _draft_download_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> None:
+    payload = _draft_payload(project_data, group_data)
+    content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    with st.sidebar.container(border=True):
+        st.download_button(
+            "Скачать черновик",
+            data=content,
+            file_name=_draft_download_filename(project_data),
+            mime="application/json",
+            use_container_width=True,
+        )
+
+
+def _draft_payload(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> dict[str, Any]:
+    active_sections = {
+        str(index): section
+        for index in range(len(group_data))
+        if (section := _normalize_group_section_name(st.session_state.get(f"group_{index}_active_section")))
+    }
+    return {
+        "type": DRAFT_FILE_KIND,
+        "schema_version": DRAFT_SCHEMA_VERSION,
+        "saved_at": date.today().isoformat(),
+        "app_version": app_version_label(),
+        "project": _json_ready(_drop_empty(project_data)),
+        "groups": [_json_ready(_drop_empty(group)) for group in group_data],
+        "active_group_index": int(st.session_state.get("active_group_index", 0) or 0),
+        "active_sections": active_sections,
+    }
+
+
+def _apply_draft_payload(payload: dict[str, Any]) -> None:
+    if not isinstance(payload, dict):
+        raise ValueError("файл черновика должен содержать JSON-объект")
+    if payload.get("type") != DRAFT_FILE_KIND:
+        raise ValueError("это не файл черновика генератора EPSS")
+    if int(payload.get("schema_version", 0) or 0) > DRAFT_SCHEMA_VERSION:
+        raise ValueError("черновик создан в более новой версии приложения")
+
+    project = _normalize_draft_project(payload.get("project", {}))
+    groups = _normalize_draft_groups(payload.get("groups", []))
+    active_group_index = _delete_group_index_value(payload.get("active_group_index", 0)) or 0
+    active_group_index = min(max(0, active_group_index), len(groups) - 1)
+
+    st.session_state.prefill_project = project
+    _sync_project_widgets_from_draft(project)
+
+    st.session_state.group_count = len(groups)
+    st.session_state.prefill_groups = [{} for _ in groups]
+    st.session_state.group_drafts = [dict(group) for group in groups]
+    st.session_state.extracted_group_fields = [set() for _ in groups]
+    st.session_state.active_group_index = active_group_index
+    _sync_group_widgets_from_group_data(groups)
+    st.session_state.active_group_index = active_group_index
+
+    active_sections = payload.get("active_sections", {})
+    if isinstance(active_sections, dict):
+        for key, section in active_sections.items():
+            index = _delete_group_index_value(key)
+            normalized_section = _normalize_group_section_name(section)
+            if index is not None and index < len(groups) and normalized_section:
+                st.session_state[f"group_{index}_active_section"] = normalized_section
+
+
+def _normalize_draft_project(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    allowed_fields = set(ProjectInfo.model_fields)
+    project = {key: _parse_draft_value(item) for key, item in value.items() if key in allowed_fields}
+    report_date = project.get("report_date")
+    if isinstance(report_date, str) and report_date:
+        try:
+            project["report_date"] = date.fromisoformat(report_date)
+        except ValueError:
+            project.pop("report_date", None)
+    return _drop_empty(project)
+
+
+def _normalize_draft_groups(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return [{}]
+    allowed_fields = {field for fields in FIELD_GROUPS.values() for field, _, _, _ in fields}
+    groups = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        group = {
+            key: _parse_draft_value(raw_value)
+            for key, raw_value in item.items()
+            if key in allowed_fields
+        }
+        groups.append(_drop_empty(group))
+    return groups or [{}]
+
+
+def _parse_draft_value(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+    return str(value).strip()
+
+
+def _sync_project_widgets_from_draft(project: dict[str, Any]) -> None:
+    for field in ("customer", "project_name", "address"):
+        key = f"project_{field}"
+        value = project.get(field)
+        if value not in ("", None):
+            st.session_state[key] = value
+        else:
+            st.session_state.pop(key, None)
+    report_date = project.get("report_date")
+    if isinstance(report_date, date):
+        st.session_state["project_report_date"] = report_date
+    else:
+        st.session_state.pop("project_report_date", None)
+    prepared_by = _normalize_preparer_surname(project.get("prepared_by"))
+    if prepared_by:
+        st.session_state["project_prepared_by"] = prepared_by
+
+
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {key: _json_ready(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_json_ready(item) for item in value]
+    if isinstance(value, set):
+        return sorted(_json_ready(item) for item in value)
+    return value
+
+
+def _draft_download_filename(project_data: dict[str, Any]) -> str:
+    project_name = str(project_data.get("project_name") or "").strip() or "Черновик_опросника"
+    return f"{safe_filename(project_name)}_черновик_{date.today():%d.%m.%Y}.json"
+
+
 def _render_lift_team_sidebar() -> str | None:
     prefill_project = st.session_state.get("prefill_project", {})
     prefilled_surname = _normalize_preparer_surname(prefill_project.get("prepared_by"))
@@ -1535,8 +1707,11 @@ def _copy_group(index: int) -> None:
 
     extracted_fields = set(st.session_state.extracted_group_fields[index])
     st.session_state.extracted_group_fields.insert(copy_index, extracted_fields)
-    st.session_state.prefill_groups = [dict(group) for group in current_groups]
+    prefill_groups = [dict(group) for group in st.session_state.prefill_groups]
+    prefill_groups.insert(copy_index, {})
+    st.session_state.prefill_groups = prefill_groups[: len(current_groups)]
     st.session_state.group_count = len(current_groups)
+    _normalize_group_lists()
     st.session_state.active_group_index = copy_index
     _sync_group_widgets_from_group_data(current_groups)
 

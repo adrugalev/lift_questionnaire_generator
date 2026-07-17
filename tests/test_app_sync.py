@@ -828,6 +828,90 @@ def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
     }
 
 
+def test_draft_payload_serializes_current_form_state(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "active_group_index": 1,
+        "group_0_active_section": "Кабина",
+        "group_1_active_section": "Двери",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    payload = app._draft_payload(
+        {
+            "project_name": "UNO Соколиная гора",
+            "customer": "",
+            "report_date": app.date(2026, 7, 17),
+            "prepared_by": "Другалёв",
+        },
+        [
+            {"section": "Секция 1", "lift_name": "Л1", "quantity": 1, "capacity_kg": None},
+            {"section": "Секция 2", "lift_name": "Л2-Л3", "quantity": 2, "mgn_accessibility": "ДА"},
+        ],
+    )
+
+    assert payload["type"] == app.DRAFT_FILE_KIND
+    assert payload["schema_version"] == app.DRAFT_SCHEMA_VERSION
+    assert payload["project"] == {
+        "project_name": "UNO Соколиная гора",
+        "report_date": "2026-07-17",
+        "prepared_by": "Другалёв",
+    }
+    assert payload["groups"][0] == {"section": "Секция 1", "lift_name": "Л1", "quantity": 1}
+    assert payload["active_group_index"] == 1
+    assert payload["active_sections"] == {"0": "Кабина", "1": "Двери"}
+    app.json.dumps(payload, ensure_ascii=False)
+
+
+def test_apply_draft_payload_restores_project_groups_and_widgets(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 1,
+        "prefill_project": {},
+        "prefill_groups": [{}],
+        "group_drafts": [{}],
+        "extracted_group_fields": [set()],
+        "active_group_index": 0,
+        "group_section_widget_revision": 0,
+        "group_0_section": "Старое значение",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._apply_draft_payload(
+        {
+            "type": app.DRAFT_FILE_KIND,
+            "schema_version": app.DRAFT_SCHEMA_VERSION,
+            "project": {
+                "project_name": "UNO Соколиная гора",
+                "report_date": "2026-07-17",
+                "prepared_by": "Другалёв",
+            },
+            "groups": [
+                {"section": "Секция 1", "lift_name": "Л1", "quantity": 1},
+                {"section": "Секция 2", "lift_name": "Л2-Л3", "quantity": 2, "mgn_accessibility": "ДА"},
+            ],
+            "active_group_index": 1,
+            "active_sections": {"0": "Кабина", "1": "Двери"},
+        }
+    )
+
+    assert session_state["prefill_project"] == {
+        "project_name": "UNO Соколиная гора",
+        "report_date": app.date(2026, 7, 17),
+        "prepared_by": "Другалёв",
+    }
+    assert session_state["project_project_name"] == "UNO Соколиная гора"
+    assert session_state["project_report_date"] == app.date(2026, 7, 17)
+    assert session_state["project_prepared_by"] == "Другалёв"
+    assert session_state["group_count"] == 2
+    assert session_state["active_group_index"] == 1
+    assert session_state["prefill_groups"] == [{}, {}]
+    assert session_state["group_drafts"][1]["lift_name"] == "Л2-Л3"
+    assert session_state["group_0_section"] == "Секция 1"
+    assert session_state["group_1_quantity"] == "2"
+    assert session_state["group_1_mgn_accessibility"] is True
+    assert session_state["group_0_active_section"] == "Кабина"
+    assert session_state["group_1_active_section"] == "Двери"
+
+
 def test_lift_team_surnames_match_reporting_documents_directory() -> None:
     assert app.LIFT_TEAM_SURNAMES == (
         "Баранова",
@@ -1507,8 +1591,8 @@ def test_door_model_and_fire_resistance_are_swapped_in_layout() -> None:
     assert upper_door_fields == [
         "door_opening_type",
         "door_model",
-        "landing_door_height_mm",
         "landing_door_width_mm",
+        "landing_door_height_mm",
         "firefighter_mode",
         "fire_resistance",
     ]
@@ -1716,11 +1800,7 @@ def test_copy_group_inserts_full_copy_after_selected_and_activates_it(monkeypatc
 
     assert session_state["group_count"] == 3
     assert session_state["active_group_index"] == 1
-    copied_prefill = dict(session_state["prefill_groups"][1])
-    copied_prefill.pop("lift_name")
-    original_prefill = dict(session_state["prefill_groups"][0])
-    original_prefill.pop("lift_name")
-    assert copied_prefill == original_prefill
+    assert session_state["prefill_groups"][1] == {}
     copied_draft = dict(session_state["group_drafts"][1])
     copied_draft.pop("lift_name")
     original_draft = dict(session_state["group_drafts"][0])
@@ -1740,6 +1820,29 @@ def test_copy_group_inserts_full_copy_after_selected_and_activates_it(monkeypatc
         {"section"},
     ]
     assert session_state["extracted_group_fields"][1] is not session_state["extracted_group_fields"][0]
+
+
+def test_copied_group_values_can_be_cleared_without_restoring_prefill(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 1,
+        "prefill_groups": [{"section": "A", "lift_name": "Л1", "quantity": 1, "capacity_kg": 1000}],
+        "group_drafts": [{}],
+        "extracted_group_fields": [set()],
+        "active_group_index": 0,
+        "group_0_section": "A",
+        "group_0_lift_name": "Л1",
+        "group_0_quantity": "1",
+        "group_0_capacity_kg": "1000",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._copy_group(0)
+    session_state["group_1_capacity_kg"] = ""
+    app._save_group_widget_value(1, "capacity_kg", "group_1_capacity_kg")
+
+    assert "capacity_kg" not in session_state["group_drafts"][1]
+    assert "capacity_kg" not in app._group_defaults(1)
+    assert app._collect_group_from_state(1, app._group_defaults(1)).get("capacity_kg") is None
 
 
 def test_mgn_attention_warnings_are_grouped_by_lift_labels() -> None:
