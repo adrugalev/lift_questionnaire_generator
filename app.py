@@ -1755,6 +1755,8 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             label_visibility="collapsed",
             key=section_widget_key,
             format_func=lambda name: _section_display_label(name, completed_sections, group),
+            on_change=_change_group_section,
+            args=(index, section_widget_key),
         )
         section = _normalize_group_section_name(section) or section_names[0]
         st.session_state[active_section_key] = section
@@ -2348,7 +2350,7 @@ def _collect_group_from_state(index: int, defaults: dict[str, Any]) -> dict[str,
     for fields in FIELD_GROUPS.values():
         for field, _, kind, option_key in fields:
             key = f"group_{index}_{field}"
-            value = st.session_state.get(key, draft.get(field, defaults.get(field)))
+            value = draft.get(field, st.session_state.get(key, defaults.get(field)))
             if value == OTHER_OPTION:
                 value = st.session_state.get(f"{key}_custom")
             if kind == "checkbox_yes_no":
@@ -2906,6 +2908,12 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
     if field in {"lift_name", "quantity"}:
         _sync_group_lift_name_range_in_state(group_index)
         _renumber_following_group_lift_names_in_state(group_index)
+
+
+def _change_group_section(group_index: int, section_widget_key: str) -> None:
+    section = _normalize_group_section_name(st.session_state.get(section_widget_key))
+    if section:
+        st.session_state[f"group_{group_index}_active_section"] = section
 
 
 def _save_group_custom_value(group_index: int, field: str, key: str) -> None:

@@ -1966,6 +1966,67 @@ def test_copied_group_values_can_be_cleared_without_restoring_prefill(monkeypatc
     assert app._collect_group_from_state(1, app._group_defaults(1)).get("capacity_kg") is None
 
 
+def test_section_change_persists_edited_values_from_every_group_tab(monkeypatch) -> None:
+    section_key = "group_1_active_section_widget_0_0"
+    doors_section = list(app.FIELD_GROUPS)[2]
+    session_state = FakeSessionState({
+        "group_count": 2,
+        "prefill_groups": [{}, {}],
+        "group_drafts": [{}, {
+            "cabin_height_mm": 2200,
+            "landing_door_width_mm": 800,
+            "shaft_width_mm": 1900,
+            "option_ard": "РќР•Рў",
+        }],
+        "active_group_index": 1,
+        "group_1_cabin_height_mm": "2350",
+        "group_1_landing_door_width_mm": "900",
+        "group_1_shaft_width_mm": "2100",
+        "group_1_option_ard": True,
+        section_key: doors_section,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    for field in ("cabin_height_mm", "landing_door_width_mm", "shaft_width_mm"):
+        app._save_group_widget_value(1, field, f"group_1_{field}")
+    app._save_group_checkbox_value(1, "option_ard", "group_1_option_ard")
+    session_state["group_1_cabin_height_mm"] = "2200"
+    session_state["group_1_landing_door_width_mm"] = "800"
+    session_state["group_1_shaft_width_mm"] = "1900"
+    session_state["group_1_option_ard"] = False
+    app._change_group_section(1, section_key)
+
+    defaults = app._group_defaults(1)
+    collected = app._collect_group_from_state(1, defaults)
+    assert defaults["cabin_height_mm"] == "2350"
+    assert defaults["landing_door_width_mm"] == "900"
+    assert defaults["shaft_width_mm"] == "2100"
+    assert app._truthy_yes_no(defaults["option_ard"])
+    assert collected["cabin_height_mm"] == "2350"
+    assert collected["landing_door_width_mm"] == "900"
+    assert collected["shaft_width_mm"] == "2100"
+    assert app._truthy_yes_no(collected["option_ard"])
+    assert session_state["group_1_active_section"] == doors_section
+
+
+def test_group_navigation_does_not_restore_stale_widget_value(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 2,
+        "prefill_groups": [{}, {}],
+        "group_drafts": [{"cabin_height_mm": "2400"}, {}],
+        "active_group_index": 0,
+        "group_section_widget_revision": 0,
+        "group_0_cabin_height_mm": "2200",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._activate_group(1)
+
+    assert session_state["group_drafts"][0]["cabin_height_mm"] == "2400"
+    assert app._collect_group_from_state(0, app._group_defaults(0))["cabin_height_mm"] == "2400"
+    assert session_state["active_group_index"] == 1
+
+
 def test_mgn_attention_warnings_are_grouped_by_lift_labels() -> None:
     questionnaire = Questionnaire(
         lift_groups=[
