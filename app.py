@@ -570,7 +570,6 @@ def main() -> None:
     _inject_filled_field_styles()
     options = OptionsManager(OPTIONS_PATH)
     _init_state()
-    _draft_restore_sidebar()
     st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
     _render_version_caption(options)
 
@@ -579,7 +578,7 @@ def main() -> None:
 
     project_data = _project_block()
     group_data = _groups_block(options)
-    _draft_download_sidebar(project_data, group_data)
+    _draft_sidebar(project_data, group_data)
 
     questionnaire = _build_questionnaire(project_data, group_data)
     if questionnaire:
@@ -594,6 +593,14 @@ def _inject_filled_field_styles() -> None:
 def _filled_field_styles_css() -> str:
     return """
         <style>
+        @media (min-width: 768px) {
+            section[data-testid="stSidebar"],
+            section[data-testid="stSidebar"] > div {
+                min-width: 20.5rem !important;
+                width: 20.5rem !important;
+            }
+        }
+
         div[data-testid="stElementContainer"]:has(.app-header-title) {
             margin-bottom: -0.65rem !important;
         }
@@ -1082,7 +1089,7 @@ def _filled_field_styles_css() -> str:
             border: 1px solid #dce3eb;
             border-radius: 0.8rem;
             box-shadow: 0 0.15rem 0.55rem rgba(49, 51, 64, 0.06);
-            margin: 0.65rem 0 0.35rem;
+            margin: 0;
             padding: 0.9rem 1rem;
         }
 
@@ -1157,6 +1164,55 @@ def _filled_field_styles_css() -> str:
             height: 0.5rem;
         }
 
+        .sidebar-block-gap {
+            height: 1.25rem;
+        }
+
+        .draft-sidebar-gap {
+            height: 2.5rem;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] div[data-testid="stFileUploaderDropzone"] {
+            box-sizing: border-box !important;
+            padding: 0.75rem 0.85rem 0.95rem !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button {
+            box-sizing: border-box !important;
+            font-size: 0.9rem !important;
+            margin-left: calc(50% + 0.35rem) !important;
+            min-width: 0 !important;
+            min-height: 2.55rem !important;
+            padding: 0.35rem 0.55rem !important;
+            width: 7.15rem !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button p {
+            font-size: 0 !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button p::after {
+            content: "Загрузить";
+            font-size: 0.9rem !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] {
+            margin-bottom: 2.55rem !important;
+            margin-left: calc(50% - 7.5rem) !important;
+            margin-top: -6.2rem !important;
+            position: relative;
+            width: 7.15rem !important;
+            z-index: 2;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button {
+            box-sizing: border-box !important;
+            font-size: 0.9rem !important;
+            min-width: 0 !important;
+            min-height: 2.55rem !important;
+            padding: 0.35rem 0.55rem !important;
+        }
+
         section[data-testid="stSidebar"] [class*="st-key-project_preparer_"] button {
             background: #f5f7fa !important;
             border: 1px solid #cbd1da !important;
@@ -1196,6 +1252,7 @@ def _render_project_summary_sidebar() -> None:
     lift_breakdown_block = (
         f'<div class="project-summary-breakdown">{lift_breakdown}</div>' if lift_breakdown else ""
     )
+    st.sidebar.markdown('<div class="sidebar-block-gap"></div>', unsafe_allow_html=True)
     st.sidebar.markdown(
         f"""
         <div class="project-summary-card">
@@ -1218,8 +1275,11 @@ def _render_project_summary_sidebar() -> None:
     )
 
 
-def _draft_restore_sidebar() -> None:
+def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> None:
     restored_notice = st.session_state.pop("draft_restore_notice", None)
+    payload = _draft_payload(project_data, group_data)
+    content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    st.sidebar.markdown('<div class="draft-sidebar-gap"></div>', unsafe_allow_html=True)
     with st.sidebar.container(border=True):
         st.markdown("**Черновик заполнения**")
         uploaded_file = st.file_uploader(
@@ -1227,6 +1287,14 @@ def _draft_restore_sidebar() -> None:
             type=["json"],
             key="draft_upload",
             label_visibility="collapsed",
+        )
+        st.download_button(
+            "Сохранить",
+            data=content,
+            file_name=_draft_download_filename(project_data),
+            mime="application/json",
+            key="draft_save",
+            use_container_width=True,
         )
         if restored_notice:
             st.success(restored_notice)
@@ -1245,19 +1313,6 @@ def _draft_restore_sidebar() -> None:
         st.session_state.last_loaded_draft_digest = digest
         st.session_state.draft_restore_notice = "Черновик загружен. Можно продолжать заполнение."
         st.rerun()
-
-
-def _draft_download_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> None:
-    payload = _draft_payload(project_data, group_data)
-    content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
-    with st.sidebar.container(border=True):
-        st.download_button(
-            "Скачать черновик",
-            data=content,
-            file_name=_draft_download_filename(project_data),
-            mime="application/json",
-            use_container_width=True,
-        )
 
 
 def _draft_payload(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> dict[str, Any]:

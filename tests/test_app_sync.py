@@ -1017,11 +1017,13 @@ def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
 
     app._render_project_summary_sidebar()
 
-    assert ">Лифты<" in rendered[0]
-    assert ">Группы<" in rendered[0]
-    assert "Лифтов в проекте" not in rendered[0]
-    assert "4 лифта — 1,6 м/с, 630 кг, 7 ост." in rendered[0]
-    assert '</div>\n            <div class="project-summary-breakdown">' in rendered[0]
+    assert rendered[0] == '<div class="sidebar-block-gap"></div>'
+    summary_html = rendered[-1]
+    assert ">Лифты<" in summary_html
+    assert ">Группы<" in summary_html
+    assert "Лифтов в проекте" not in summary_html
+    assert "4 лифта — 1,6 м/с, 630 кг, 7 ост." in summary_html
+    assert '</div>\n            <div class="project-summary-breakdown">' in summary_html
 
 
 def test_clamp_active_group_selection_resets_old_text_label(monkeypatch) -> None:
@@ -1055,11 +1057,43 @@ def test_project_summary_breakdown_uses_small_text_and_keeps_values_aligned() ->
     css = app._filled_field_styles_css()
 
     assert ".project-summary-metric {" in css
+    assert "margin: 0;" in css
     assert "flex-direction: column;" in css
     assert "min-height: 1.15em;" in css
     assert ".project-summary-breakdown {" in css
     assert "font-size: 0.68rem;" in css
     assert "border-top: 1px solid #e1e7ef;" in css
+
+
+def test_sidebar_width_is_fixed_for_desktop_layout() -> None:
+    css = app._filled_field_styles_css()
+
+    assert 'section[data-testid="stSidebar"]' in css
+    assert "min-width: 20.5rem !important;" in css
+    assert "width: 20.5rem !important;" in css
+
+
+def test_draft_sidebar_has_gap_from_project_summary() -> None:
+    css = app._filled_field_styles_css()
+
+    assert ".sidebar-block-gap {" in css
+    assert "height: 1.25rem;" in css
+    assert ".draft-sidebar-gap {" in css
+    assert "height: 2.5rem;" in css
+
+
+def test_draft_save_button_is_positioned_inside_upload_card() -> None:
+    css = app._filled_field_styles_css()
+
+    assert '[class*="st-key-draft_save"]' in css
+    assert "margin-left: calc(50% - 7.5rem) !important;" in css
+    assert "margin-top: -6.2rem !important;" in css
+    assert "width: 7.15rem !important;" in css
+    assert '[class*="st-key-draft_upload"] button' in css
+    assert "margin-left: calc(50% + 0.35rem) !important;" in css
+    assert 'content: "Загрузить";' in css
+    assert "width: 7.15rem !important;" in css
+    assert "min-height: 2.55rem !important;" in css
 
 
 def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) -> None:
