@@ -912,6 +912,51 @@ def test_apply_draft_payload_restores_project_groups_and_widgets(monkeypatch) ->
     assert session_state["group_1_active_section"] == "Двери"
 
 
+def test_pending_draft_is_applied_before_form_widgets_are_rendered(monkeypatch) -> None:
+    payload = {
+        "type": app.DRAFT_FILE_KIND,
+        "schema_version": app.DRAFT_SCHEMA_VERSION,
+        "project": {
+            "project_name": "Бизнес-центр Орбита",
+            "prepared_by": "Другалёв",
+        },
+        "groups": [{"section": "Секция 1", "lift_name": "Л1", "quantity": 1}],
+    }
+    session_state = FakeSessionState({
+        "pending_draft_payload": payload,
+        "group_count": 1,
+        "prefill_project": {},
+        "prefill_groups": [{}],
+        "group_drafts": [{}],
+        "extracted_group_fields": [set()],
+        "active_group_index": 0,
+        "group_section_widget_revision": 0,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._apply_pending_draft_restore()
+
+    assert "pending_draft_payload" not in session_state
+    assert session_state["project_project_name"] == "Бизнес-центр Орбита"
+    assert session_state["project_prepared_by"] == "Другалёв"
+    assert session_state["group_0_lift_name"] == "Л1"
+    assert session_state["draft_restore_notice"] == (
+        "Черновик загружен. Можно продолжать заполнение."
+    )
+
+
+def test_invalid_pending_draft_shows_error_without_crashing(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "pending_draft_payload": {"type": "unknown", "schema_version": 1},
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._apply_pending_draft_restore()
+
+    assert "pending_draft_payload" not in session_state
+    assert session_state["draft_restore_error"].startswith("Не удалось загрузить черновик:")
+
+
 def test_lift_team_surnames_match_reporting_documents_directory() -> None:
     assert app.LIFT_TEAM_SURNAMES == (
         "Баранова",

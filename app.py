@@ -570,6 +570,7 @@ def main() -> None:
     _inject_filled_field_styles()
     options = OptionsManager(OPTIONS_PATH)
     _init_state()
+    _apply_pending_draft_restore()
     st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
     _render_version_caption(options)
 
@@ -1277,6 +1278,7 @@ def _render_project_summary_sidebar() -> None:
 
 def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> None:
     restored_notice = st.session_state.pop("draft_restore_notice", None)
+    restore_error = st.session_state.pop("draft_restore_error", None)
     payload = _draft_payload(project_data, group_data)
     content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
     st.sidebar.markdown('<div class="draft-sidebar-gap"></div>', unsafe_allow_html=True)
@@ -1298,6 +1300,8 @@ def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]
         )
         if restored_notice:
             st.success(restored_notice)
+        if restore_error:
+            st.error(restore_error)
         if uploaded_file is None:
             return
         content = uploaded_file.getvalue()
@@ -1306,13 +1310,24 @@ def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]
             return
         try:
             payload = json.loads(content.decode("utf-8-sig"))
-            _apply_draft_payload(payload)
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError, TypeError) as exc:
             st.error(f"Не удалось загрузить черновик: {exc}")
             return
         st.session_state.last_loaded_draft_digest = digest
-        st.session_state.draft_restore_notice = "Черновик загружен. Можно продолжать заполнение."
+        st.session_state.pending_draft_payload = payload
         st.rerun()
+
+
+def _apply_pending_draft_restore() -> None:
+    payload = st.session_state.pop("pending_draft_payload", None)
+    if payload is None:
+        return
+    try:
+        _apply_draft_payload(payload)
+    except (ValueError, TypeError) as exc:
+        st.session_state.draft_restore_error = f"Не удалось загрузить черновик: {exc}"
+        return
+    st.session_state.draft_restore_notice = "Черновик загружен. Можно продолжать заполнение."
 
 
 def _draft_payload(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> dict[str, Any]:
