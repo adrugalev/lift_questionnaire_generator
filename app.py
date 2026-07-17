@@ -1467,21 +1467,27 @@ def _render_lift_team_sidebar() -> str | None:
             unsafe_allow_html=True,
         )
         button_columns = st.columns(2, gap="small")
-        clicked_surname = None
         for index, surname in enumerate(LIFT_TEAM_SURNAMES):
             with button_columns[index % 2]:
-                if st.button(
+                st.button(
                     surname,
                     key=f"project_preparer_{index}",
                     type="secondary",
                     use_container_width=True,
-                ):
-                    clicked_surname = surname
+                    on_click=_select_preparer_surname,
+                    args=(surname,),
+                )
 
-        if clicked_surname:
-            st.session_state["project_prepared_by"] = clicked_surname
-            st.rerun()
-        return selected_surname
+        return _normalize_preparer_surname(st.session_state.get("project_prepared_by"))
+
+
+def _select_preparer_surname(surname: str) -> None:
+    selected_surname = _normalize_preparer_surname(surname)
+    if selected_surname:
+        st.session_state["project_prepared_by"] = selected_surname
+        prefill_project = dict(st.session_state.get("prefill_project", {}))
+        prefill_project["prepared_by"] = selected_surname
+        st.session_state["prefill_project"] = prefill_project
 
 
 def _normalize_preparer_surname(value: Any) -> str | None:
@@ -1495,10 +1501,10 @@ def _selected_preparer_button_css(selected_index: int) -> str:
     key_class = f"st-key-project_preparer_{selected_index}"
     return f"""
         <style>
-        section[data-testid="stSidebar"] .{key_class} button,
-        section[data-testid="stSidebar"] .{key_class} button:hover,
-        section[data-testid="stSidebar"] .{key_class} button:focus,
-        section[data-testid="stSidebar"] .{key_class} button:focus-visible {{
+        section[data-testid="stSidebar"] [class*="st-key-project_preparer_"].{key_class} button,
+        section[data-testid="stSidebar"] [class*="st-key-project_preparer_"].{key_class} button:hover,
+        section[data-testid="stSidebar"] [class*="st-key-project_preparer_"].{key_class} button:focus,
+        section[data-testid="stSidebar"] [class*="st-key-project_preparer_"].{key_class} button:focus-visible {{
             background: #e8f5ed !important;
             border: 1px solid #32a66a !important;
             box-shadow: 0 0 0 0.15rem rgba(50, 166, 106, 0.22) !important;
@@ -1506,7 +1512,7 @@ def _selected_preparer_button_css(selected_index: int) -> str:
             outline: none !important;
         }}
 
-        section[data-testid="stSidebar"] .{key_class} button p {{
+        section[data-testid="stSidebar"] [class*="st-key-project_preparer_"].{key_class} button p {{
             color: #23784a !important;
         }}
         </style>

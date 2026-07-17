@@ -960,6 +960,37 @@ def test_lift_team_sidebar_uses_short_preparer_label(monkeypatch) -> None:
     assert buttons == list(app.LIFT_TEAM_SURNAMES)
 
 
+def test_lift_team_sidebar_selection_persists_between_reruns(monkeypatch) -> None:
+    session_state = FakeSessionState({"prefill_project": {}})
+
+    class FakeContainer:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    def click_drugalev(label, **kwargs):
+        if label == "Другалёв":
+            kwargs["on_click"](*kwargs["args"])
+        return False
+
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(app.st.sidebar, "container", lambda **kwargs: FakeContainer())
+    monkeypatch.setattr(app.st, "markdown", lambda *args, **kwargs: None)
+    monkeypatch.setattr(app.st, "columns", lambda *args, **kwargs: [FakeContainer(), FakeContainer()])
+    monkeypatch.setattr(app.st, "button", click_drugalev)
+
+    assert app._render_lift_team_sidebar() == "Другалёв"
+    assert session_state["project_prepared_by"] == "Другалёв"
+    assert session_state["prefill_project"]["prepared_by"] == "Другалёв"
+
+    session_state.pop("project_prepared_by")
+    monkeypatch.setattr(app.st, "button", lambda *args, **kwargs: False)
+    assert app._render_lift_team_sidebar() == "Другалёв"
+    assert session_state["project_prepared_by"] == "Другалёв"
+
+
 def test_lift_team_sidebar_selected_button_uses_explicit_green_style() -> None:
     css = app._filled_field_styles_css()
     selected_css = app._selected_preparer_button_css(1)
@@ -968,7 +999,7 @@ def test_lift_team_sidebar_selected_button_uses_explicit_green_style() -> None:
     assert '[class*="st-key-project_preparer_"] button' in css
     assert "background: #f5f7fa !important;" in css
     assert "border: 1px solid #cbd1da !important;" in css
-    assert ".st-key-project_preparer_1 button" in selected_css
+    assert '[class*="st-key-project_preparer_"].st-key-project_preparer_1 button' in selected_css
     assert "background: #e8f5ed !important;" in selected_css
     assert "border: 1px solid #32a66a !important;" in selected_css
     assert "color: #23784a !important;" in selected_css
