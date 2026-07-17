@@ -41,3 +41,15 @@ def test_lift_group_preserves_arbitrary_text_in_dimensions():
 
     assert group.cabin_width_mm == "ПО ПРОЕКТУ"
 
+
+def test_lift_group_converts_numeric_dimension_text_to_integer():
+    group = LiftGroup(
+        cabin_width_mm="2700",
+        cabin_depth_mm="1750.0",
+        shaft_width_mm="1500,0",
+    )
+
+    assert group.cabin_width_mm == 2700
+    assert group.cabin_depth_mm == 1750
+    assert group.shaft_width_mm == 1500
+

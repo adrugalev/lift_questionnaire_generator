@@ -87,6 +87,27 @@ class LiftGroup(BaseModel):
     price: Optional[str] = None
     containers_count: Optional[int] = Field(default=None, gt=0)
 
+    @field_validator(
+        "cabin_width_mm",
+        "cabin_depth_mm",
+        "cabin_height_mm",
+        "shaft_width_mm",
+        "shaft_depth_mm",
+        "pit_depth_mm",
+        "overhead_mm",
+        mode="before",
+    )
+    @classmethod
+    def normalize_dimension_value(cls, value):
+        if not isinstance(value, str):
+            return value
+        text = value.strip()
+        try:
+            number = float(text.replace(",", "."))
+        except ValueError:
+            return text
+        return int(number) if number.is_integer() else text
+
 
 class Questionnaire(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)

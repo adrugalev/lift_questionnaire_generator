@@ -41,6 +41,30 @@ def test_first_group_goes_to_column_c(template_path, mapping_path):
     assert ws.freeze_panes == "C1"
 
 
+def test_numeric_dimension_text_is_written_as_number(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                cabin_width_mm="2700",
+                cabin_depth_mm="РАСЧЁТНОЕ",
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+    mapping = excel_generator.load_mapping(mapping_path)
+    width_row = int(mapping["lift_group_fields"]["cabin_width_mm"])
+    depth_row = int(mapping["lift_group_fields"]["cabin_depth_mm"])
+
+    assert ws.cell(row=width_row, column=3).value == 2700
+    assert ws.cell(row=width_row, column=3).data_type == "n"
+    assert ws.cell(row=depth_row, column=3).value == "РАСЧЁТНОЕ"
+    assert ws.cell(row=depth_row, column=3).data_type == "s"
+
+
 def test_door_model_is_written_inside_cabin_doors_section(template_path, mapping_path):
     questionnaire = Questionnaire(
         project=ProjectInfo(project_name="Тестовый проект"),
