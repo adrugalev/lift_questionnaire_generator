@@ -574,11 +574,13 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert questionnaire_ws.sheet_view.zoomScale == 80
     assert ws.sheet_view.zoomScale == 80
     with ZipFile(BytesIO(content)) as archive:
+        media_files = [name for name in archive.namelist() if name.startswith("xl/media/")]
         drawing_xml = "\n".join(
             archive.read(name).decode("utf-8")
             for name in archive.namelist()
             if name.startswith("xl/drawings/") and name.endswith(".xml")
         )
+    assert len(media_files) == 1
     assert 'cx="609600" cy="609600"' in drawing_xml
     assert 'cx="1009650" cy="1009650"' in drawing_xml
     assert "<colOff>180975</colOff>" in drawing_xml

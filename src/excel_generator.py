@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import unicodedata
+import zipfile
 from copy import copy
 from io import BytesIO
 from pathlib import Path
@@ -250,13 +252,49 @@ def generate_questionnaire_xlsx(
     else:
         _remove_visual_summary_sheet(workbook)
 
-    if output_path:
-        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-        workbook.save(output_path)
-
     buffer = BytesIO()
     workbook.save(buffer)
-    return buffer.getvalue()
+    content = _deduplicate_xlsx_media(buffer.getvalue())
+    if output_path:
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(content)
+    return content
+
+
+def _deduplicate_xlsx_media(content: bytes) -> bytes:
+    source_buffer = BytesIO(content)
+    with zipfile.ZipFile(source_buffer, "r") as source:
+        media_by_hash: dict[str, str] = {}
+        duplicate_media: dict[str, str] = {}
+        for info in source.infolist():
+            if not info.filename.startswith("xl/media/") or info.is_dir():
+                continue
+            digest = hashlib.sha256(source.read(info.filename)).hexdigest()
+            canonical_name = media_by_hash.setdefault(digest, info.filename)
+            if canonical_name != info.filename:
+                duplicate_media[info.filename] = canonical_name
+
+        if not duplicate_media:
+            return content
+
+        output_buffer = BytesIO()
+        with zipfile.ZipFile(output_buffer, "w") as output:
+            for info in source.infolist():
+                if info.filename in duplicate_media:
+                    continue
+                data = source.read(info.filename)
+                if info.filename.endswith(".rels"):
+                    text = data.decode("utf-8")
+                    for duplicate_name, canonical_name in duplicate_media.items():
+                        text = text.replace(f'/{duplicate_name}', f'/{canonical_name}')
+                        text = text.replace(
+                            f'../media/{Path(duplicate_name).name}',
+                            f'../media/{Path(canonical_name).name}',
+                        )
+                    data = text.encode("utf-8")
+                output.writestr(info, data)
+        return output_buffer.getvalue()
 
 
 def _find_questionnaire_sheet(workbook, configured_name: str | None) -> Worksheet:
