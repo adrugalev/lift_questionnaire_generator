@@ -191,6 +191,7 @@ def generate_questionnaire_xlsx(
     *,
     include_summary_sheet: bool = True,
 ) -> bytes:
+    questionnaire = _questionnaire_with_grouped_identical_lifts(questionnaire)
     mapping = load_mapping(mapping_path)
     workbook = load_workbook(template_path)
     worksheet = _find_questionnaire_sheet(workbook, mapping.get("sheet_name"))
@@ -260,6 +261,52 @@ def generate_questionnaire_xlsx(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(content)
     return content
+
+
+def _questionnaire_with_grouped_identical_lifts(questionnaire: Questionnaire) -> Questionnaire:
+    grouped_lifts = _group_identical_lift_groups(questionnaire.lift_groups)
+    if len(grouped_lifts) == len(questionnaire.lift_groups):
+        return questionnaire
+    return questionnaire.model_copy(update={"lift_groups": grouped_lifts})
+
+
+def _group_identical_lift_groups(groups: list[Any]) -> list[Any]:
+    grouped: list[Any] = []
+    index_by_signature: dict[str, int] = {}
+    for source_group in groups:
+        quantity = getattr(source_group, "quantity", None)
+        if not isinstance(quantity, int) or quantity <= 0:
+            grouped.append(source_group.model_copy(deep=True))
+            continue
+
+        identity = source_group.model_dump(exclude={"section", "lift_name", "quantity"})
+        signature = json.dumps(identity, ensure_ascii=False, sort_keys=True, default=str)
+        existing_index = index_by_signature.get(signature)
+        if existing_index is None:
+            index_by_signature[signature] = len(grouped)
+            grouped.append(source_group.model_copy(deep=True))
+            continue
+
+        existing = grouped[existing_index]
+        grouped[existing_index] = existing.model_copy(
+            update={
+                "section": _join_group_labels(existing.section, source_group.section),
+                "lift_name": _join_group_labels(existing.lift_name, source_group.lift_name),
+                "quantity": int(existing.quantity or 0) + quantity,
+            },
+            deep=True,
+        )
+    return grouped
+
+
+def _join_group_labels(first: Any, second: Any) -> str | None:
+    labels: list[str] = []
+    for value in (first, second):
+        for label in str(value or "").split(","):
+            label = label.strip()
+            if label and label not in labels:
+                labels.append(label)
+    return ", ".join(labels) or None
 
 
 def _deduplicate_xlsx_media(content: bytes) -> bytes:
@@ -1006,7 +1053,7 @@ def _visual_lift_name(lift_name: Any, quantity: Any) -> str:
     text = str(lift_name or "").strip()
     if not text:
         return ""
-    if not isinstance(quantity, int) or quantity <= 1 or "-" in text or "–" in text:
+    if not isinstance(quantity, int) or quantity <= 1 or "-" in text or "–" in text or "," in text:
         return text
     match = re.match(r"^(.*?)(\d+)(\D*)$", text)
     if not match:

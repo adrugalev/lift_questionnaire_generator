@@ -41,6 +41,59 @@ def test_first_group_goes_to_column_c(template_path, mapping_path):
     assert ws.freeze_panes == "C1"
 
 
+def test_identical_lifts_from_different_sections_are_grouped(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                section="Секция А",
+                lift_name="Л1",
+                quantity=1,
+                capacity_kg=1000,
+                speed_ms=1.6,
+                stops=10,
+            ),
+            LiftGroup(
+                section="Секция Б",
+                lift_name="Л2",
+                quantity=1,
+                capacity_kg=630,
+                speed_ms=1.6,
+                stops=10,
+            ),
+            LiftGroup(
+                section="Секция В",
+                lift_name="Л5",
+                quantity=2,
+                capacity_kg=1000,
+                speed_ms=1.6,
+                stops=10,
+            ),
+            LiftGroup(
+                section="Секция Г",
+                lift_name="Л7",
+                quantity=1,
+                capacity_kg=1000,
+                speed_ms=1.6,
+                stops=11,
+            ),
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["C2"].value == "Секция А, Секция В"
+    assert ws["C3"].value == "Л1, Л5"
+    assert ws["C4"].value == 3
+    assert ws["C5"].value == 1000
+    assert ws["D2"].value == "Секция Б"
+    assert ws["D3"].value == "Л2"
+    assert ws["D4"].value == 1
+    assert ws["E2"].value == "Секция Г"
+    assert ws["E3"].value == "Л7"
+    assert ws["E4"].value == 1
+
+
 def test_numeric_dimension_text_is_written_as_number(template_path, mapping_path):
     questionnaire = Questionnaire(
         lift_groups=[
@@ -145,8 +198,8 @@ def test_questionnaire_lift_name_uses_range_for_multi_lift_group(template_path, 
     questionnaire = Questionnaire(
         project=ProjectInfo(project_name="Тестовый проект"),
         lift_groups=[
-            LiftGroup(lift_name="Л1", quantity=2),
-            LiftGroup(lift_name="Л3", quantity=3),
+            LiftGroup(lift_name="Л1", quantity=2, capacity_kg=1000),
+            LiftGroup(lift_name="Л3", quantity=3, capacity_kg=630),
         ],
     )
 
