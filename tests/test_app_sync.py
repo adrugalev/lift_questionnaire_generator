@@ -1888,7 +1888,7 @@ def test_add_group_makes_new_group_active(monkeypatch) -> None:
     assert session_state["active_group_index"] == 1
 
 
-def test_copy_group_inserts_full_copy_after_selected_and_activates_it(monkeypatch) -> None:
+def test_copy_group_appends_full_copy_and_activates_it(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_count": 2,
         "prefill_groups": [
@@ -1920,27 +1920,27 @@ def test_copy_group_inserts_full_copy_after_selected_and_activates_it(monkeypatc
     app._copy_group(0)
 
     assert session_state["group_count"] == 3
-    assert session_state["active_group_index"] == 1
-    assert session_state["prefill_groups"][1] == {}
-    copied_draft = dict(session_state["group_drafts"][1])
+    assert session_state["active_group_index"] == 2
+    assert session_state["prefill_groups"][2] == {}
+    copied_draft = dict(session_state["group_drafts"][2])
     copied_draft.pop("lift_name")
     original_draft = dict(session_state["group_drafts"][0])
     original_draft.pop("lift_name")
     assert copied_draft == original_draft
-    assert session_state["group_1_section"] == "A"
-    assert session_state["group_1_lift_name"] == "Л3-Л4"
-    assert session_state["group_1_quantity"] == "2"
-    assert session_state["group_1_capacity_kg"] == "1000"
-    assert session_state["group_1_cop_type"] == "EX-AC99A"
-    assert session_state["group_1_option_ard"] is True
-    assert session_state["group_2_section"] == "B"
-    assert session_state["group_2_lift_name"] == "Л5"
+    assert session_state["group_1_section"] == "B"
+    assert session_state["group_1_lift_name"] == "Л3"
+    assert session_state["group_2_section"] == "A"
+    assert session_state["group_2_lift_name"] == "Л4-Л5"
+    assert session_state["group_2_quantity"] == "2"
+    assert session_state["group_2_capacity_kg"] == "1000"
+    assert session_state["group_2_cop_type"] == "EX-AC99A"
+    assert session_state["group_2_option_ard"] is True
     assert session_state["extracted_group_fields"] == [
         {"section", "lift_name"},
-        {"section", "lift_name"},
         {"section"},
+        {"section", "lift_name"},
     ]
-    assert session_state["extracted_group_fields"][1] is not session_state["extracted_group_fields"][0]
+    assert session_state["extracted_group_fields"][2] is not session_state["extracted_group_fields"][0]
 
 
 def test_copied_group_values_can_be_cleared_without_restoring_prefill(monkeypatch) -> None:

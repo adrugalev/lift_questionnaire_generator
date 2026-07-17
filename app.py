@@ -1798,14 +1798,18 @@ def _copy_group(index: int) -> None:
         _collect_group_from_state(group_index, _group_defaults(group_index))
         for group_index in range(st.session_state.group_count)
     ]
-    copy_index = index + 1
-    current_groups.insert(copy_index, dict(current_groups[index]))
-    _renumber_following_group_lift_names(current_groups, index)
+    copy_index = len(current_groups)
+    copied_group = dict(current_groups[index])
+    last_group = current_groups[-1]
+    next_lift_name = _next_group_lift_name(last_group.get("lift_name"), last_group.get("quantity"))
+    if next_lift_name:
+        copied_group["lift_name"] = _lift_name_for_quantity(next_lift_name, copied_group.get("quantity"))
+    current_groups.append(copied_group)
 
     extracted_fields = set(st.session_state.extracted_group_fields[index])
-    st.session_state.extracted_group_fields.insert(copy_index, extracted_fields)
+    st.session_state.extracted_group_fields.append(extracted_fields)
     prefill_groups = [dict(group) for group in st.session_state.prefill_groups]
-    prefill_groups.insert(copy_index, {})
+    prefill_groups.append({})
     st.session_state.prefill_groups = prefill_groups[: len(current_groups)]
     st.session_state.group_count = len(current_groups)
     _normalize_group_lists()
