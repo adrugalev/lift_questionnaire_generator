@@ -924,6 +924,8 @@ def test_pending_draft_is_applied_before_form_widgets_are_rendered(monkeypatch) 
     }
     session_state = FakeSessionState({
         "pending_draft_payload": payload,
+        "draft_upload_revision": 0,
+        "last_loaded_draft_digest": "123",
         "group_count": 1,
         "prefill_project": {},
         "prefill_groups": [{}],
@@ -943,11 +945,15 @@ def test_pending_draft_is_applied_before_form_widgets_are_rendered(monkeypatch) 
     assert session_state["draft_restore_notice"] == (
         "Черновик загружен. Можно продолжать заполнение."
     )
+    assert session_state["draft_upload_revision"] == 1
+    assert "last_loaded_draft_digest" not in session_state
 
 
 def test_invalid_pending_draft_shows_error_without_crashing(monkeypatch) -> None:
     session_state = FakeSessionState({
         "pending_draft_payload": {"type": "unknown", "schema_version": 1},
+        "draft_upload_revision": 4,
+        "last_loaded_draft_digest": "456",
     })
     monkeypatch.setattr(app.st, "session_state", session_state)
 
@@ -955,6 +961,8 @@ def test_invalid_pending_draft_shows_error_without_crashing(monkeypatch) -> None
 
     assert "pending_draft_payload" not in session_state
     assert session_state["draft_restore_error"].startswith("Не удалось загрузить черновик:")
+    assert session_state["draft_upload_revision"] == 5
+    assert "last_loaded_draft_digest" not in session_state
 
 
 def test_lift_team_surnames_match_reporting_documents_directory() -> None:

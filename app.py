@@ -1251,6 +1251,7 @@ def _init_state() -> None:
     st.session_state.setdefault("extracted_group_fields", [])
     st.session_state.setdefault("active_group_index", 0)
     st.session_state.setdefault("group_section_widget_revision", 0)
+    st.session_state.setdefault("draft_upload_revision", 0)
 
 
 def _render_project_summary_sidebar() -> None:
@@ -1297,7 +1298,7 @@ def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]
         uploaded_file = st.file_uploader(
             "Загрузить черновик",
             type=["json"],
-            key="draft_upload",
+            key=f"draft_upload_{int(st.session_state.get('draft_upload_revision', 0))}",
             label_visibility="collapsed",
         )
         st.download_button(
@@ -1336,8 +1337,16 @@ def _apply_pending_draft_restore() -> None:
         _apply_draft_payload(payload)
     except (ValueError, TypeError) as exc:
         st.session_state.draft_restore_error = f"Не удалось загрузить черновик: {exc}"
+        _reset_draft_uploader()
         return
     st.session_state.draft_restore_notice = "Черновик загружен. Можно продолжать заполнение."
+    _reset_draft_uploader()
+
+
+def _reset_draft_uploader() -> None:
+    revision = int(st.session_state.get("draft_upload_revision", 0) or 0)
+    st.session_state.draft_upload_revision = revision + 1
+    st.session_state.pop("last_loaded_draft_digest", None)
 
 
 def _draft_payload(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> dict[str, Any]:
