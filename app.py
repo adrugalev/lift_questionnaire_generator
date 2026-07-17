@@ -2904,10 +2904,10 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
     if field == "stops":
         _apply_stops_derived_fields(group_index, value)
     if field == "cabin_type":
-        stops_value = st.session_state.get(f"group_{group_index}_stops", draft.get("stops"))
+        stops_value = _stops_for_group(group_index, draft)
         _apply_stops_derived_fields(group_index, stops_value)
     if field == "underground_floors":
-        stops_value = st.session_state.get(f"group_{group_index}_stops", draft.get("stops"))
+        stops_value = _stops_for_group(group_index, draft)
         _apply_stops_derived_fields(group_index, stops_value)
     if field in {"lift_name", "quantity"}:
         _sync_group_lift_name_range_in_state(group_index)
@@ -2987,12 +2987,12 @@ def _apply_stops_derived_fields(group_index: int, stops_value: Any) -> None:
 
 
 def _is_through_cabin_for_group(group_index: int, draft: dict[str, Any]) -> bool:
-    value = st.session_state.get(f"group_{group_index}_cabin_type", draft.get("cabin_type"))
+    value = draft.get("cabin_type", st.session_state.get(f"group_{group_index}_cabin_type"))
     return str(value or "").strip().casefold() == "проходная"
 
 
 def _underground_floors_for_group(group_index: int, draft: dict[str, Any]) -> int:
-    value = st.session_state.get(f"group_{group_index}_underground_floors", draft.get("underground_floors"))
+    value = draft.get("underground_floors", st.session_state.get(f"group_{group_index}_underground_floors"))
     underground_floors = _parse_number(str(value or ""), f"group_{group_index}_underground_floors")
     if underground_floors is None:
         return 0
@@ -3000,7 +3000,7 @@ def _underground_floors_for_group(group_index: int, draft: dict[str, Any]) -> in
 
 
 def _stops_for_group(group_index: int, draft: dict[str, Any]) -> int | None:
-    value = st.session_state.get(f"group_{group_index}_stops", draft.get("stops"))
+    value = draft.get("stops", st.session_state.get(f"group_{group_index}_stops"))
     return _parse_positive_int_silent(value)
 
 

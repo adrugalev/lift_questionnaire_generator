@@ -1586,6 +1586,29 @@ def test_stops_do_not_overwrite_doors_for_through_cabin(monkeypatch) -> None:
     assert session_state["group_drafts"][0]["button_marking"] == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
 
 
+def test_stale_copied_cabin_widget_does_not_restore_automatic_door_count(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{
+            "cabin_type": "Проходная",
+            "stops": 4,
+            "doors_count": 6,
+        }],
+        "group_0_cabin_type": "Непроходная",
+        "group_0_stops": "4",
+        "group_0_doors_count": "6",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    session_state["group_0_doors_count"] = "7"
+    app._save_group_widget_value(0, "doors_count", "group_0_doors_count")
+    group = app._collect_group_from_state(0, app._group_defaults(0))
+
+    assert group["cabin_type"] == "Проходная"
+    assert group["doors_count"] == "7"
+    assert session_state["group_drafts"][0]["doors_count"] == "7"
+
+
 def test_stops_update_doors_for_non_through_cabin(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_drafts": [{
