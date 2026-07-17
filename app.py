@@ -1214,6 +1214,16 @@ def _filled_field_styles_css() -> str:
             padding: 0.35rem 0.55rem !important;
         }
 
+        section[data-testid="stSidebar"]:has(
+            [class*="st-key-draft_upload"] [data-testid="stFileChip"]
+        ) [class*="st-key-draft_save"] {
+            margin-bottom: 0 !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+            margin-top: 0.6rem !important;
+            z-index: auto !important;
+        }
+
         section[data-testid="stSidebar"] [class*="st-key-project_preparer_"] button {
             background: #f5f7fa !important;
             border: 1px solid #cbd1da !important;

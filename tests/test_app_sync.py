@@ -1158,7 +1158,7 @@ def test_draft_sidebar_has_gap_from_project_summary() -> None:
     assert "height: 2.5rem;" in css
 
 
-def test_draft_save_button_is_positioned_inside_upload_card() -> None:
+def test_draft_save_button_moves_below_an_uploaded_file() -> None:
     css = app._filled_field_styles_css()
 
     assert '[class*="st-key-draft_save"]' in css
@@ -1170,6 +1170,9 @@ def test_draft_save_button_is_positioned_inside_upload_card() -> None:
     assert 'content: "Загрузить";' in css
     assert "width: 7.15rem !important;" in css
     assert "min-height: 2.55rem !important;" in css
+    assert '[data-testid="stFileChip"]' in css
+    assert "margin-left: auto !important;" in css
+    assert "margin-top: 0.6rem !important;" in css
 
 
 def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) -> None:
