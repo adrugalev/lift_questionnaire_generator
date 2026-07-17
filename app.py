@@ -229,6 +229,16 @@ NUMERIC_FIELDS = {
     "overhead_mm": int,
 }
 
+SPECIAL_DIMENSION_FIELDS = {
+    "cabin_width_mm",
+    "cabin_depth_mm",
+    "cabin_height_mm",
+    "shaft_width_mm",
+    "shaft_depth_mm",
+    "pit_depth_mm",
+    "overhead_mm",
+}
+
 CAPACITY_OPTIONS_KG = [
     400,
     450,
@@ -3023,7 +3033,7 @@ def _format_decimal_option(value: Any) -> str:
     return f"{number:g}"
 
 
-def _parse_number(value: Any, key: str) -> int | float | None:
+def _parse_number(value: Any, key: str) -> int | float | str | None:
     if value is None:
         return None
     value = str(value).strip().replace(",", ".")
@@ -3031,15 +3041,17 @@ def _parse_number(value: Any, key: str) -> int | float | None:
         return None
     if not value:
         return None
+    field_name = key.split("_", 2)[-1]
     parser = NUMERIC_FIELDS.get(key.rsplit("_", 1)[-1])
     if parser is None:
-        field_name = key.split("_", 2)[-1]
         parser = NUMERIC_FIELDS.get(field_name, float)
     try:
         if parser is int:
             return int(float(value))
         return float(value)
     except ValueError:
+        if field_name in SPECIAL_DIMENSION_FIELDS:
+            return value
         st.warning(f"Поле содержит нечисловое значение: {value}")
         return None
 

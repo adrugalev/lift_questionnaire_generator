@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Optional
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+DimensionValue = Annotated[int, Field(gt=0)] | str
 
 
 class ProjectInfo(BaseModel):
@@ -42,9 +45,9 @@ class LiftGroup(BaseModel):
     button_marking: Optional[str] = None
     main_landing_floor: Optional[str] = None
     cabin_type: Optional[str] = None
-    cabin_width_mm: Optional[int] = Field(default=None, gt=0)
-    cabin_depth_mm: Optional[int] = Field(default=None, gt=0)
-    cabin_height_mm: Optional[int] = Field(default=None, gt=0)
+    cabin_width_mm: Optional[DimensionValue] = None
+    cabin_depth_mm: Optional[DimensionValue] = None
+    cabin_height_mm: Optional[DimensionValue] = None
     side_wall_finish: Optional[str] = None
     rear_wall_finish: Optional[str] = None
     front_wall_finish: Optional[str] = None
@@ -73,10 +76,10 @@ class LiftGroup(BaseModel):
     other_floors_lop_finish: Optional[str] = None
     machine_room: Optional[str] = None
     shaft_material: Optional[str] = None
-    shaft_width_mm: Optional[int] = Field(default=None, gt=0)
-    shaft_depth_mm: Optional[int] = Field(default=None, gt=0)
-    pit_depth_mm: Optional[int] = Field(default=None, gt=0)
-    overhead_mm: Optional[int] = Field(default=None, gt=0)
+    shaft_width_mm: Optional[DimensionValue] = None
+    shaft_depth_mm: Optional[DimensionValue] = None
+    pit_depth_mm: Optional[DimensionValue] = None
+    overhead_mm: Optional[DimensionValue] = None
     room_under_pit: Optional[str] = None
     seismic: Optional[str] = None
     additional_options: Optional[str] = None

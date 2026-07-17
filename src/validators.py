@@ -19,8 +19,10 @@ class ValidationMessage:
     message: str
 
 
-def _positive(value: int | float | None, field_label: str, location: str) -> list[ValidationMessage]:
+def _positive(value: int | float | str | None, field_label: str, location: str) -> list[ValidationMessage]:
     if value is None:
+        return []
+    if isinstance(value, str):
         return []
     if value <= 0:
         return [ValidationMessage("error", location, f"{field_label} должно быть больше 0.")]

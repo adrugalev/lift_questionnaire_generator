@@ -1567,6 +1567,17 @@ def test_parse_number_ignores_empty_none_values(monkeypatch) -> None:
     assert warnings == []
 
 
+def test_dimension_fields_accept_free_text(monkeypatch) -> None:
+    warnings: list[str] = []
+    monkeypatch.setattr(app.st, "warning", warnings.append)
+
+    assert app._parse_number("РАСЧЁТНОЕ", "group_0_cabin_width_mm") == "РАСЧЁТНОЕ"
+    assert app._parse_number("по проекту", "group_0_cabin_depth_mm") == "по проекту"
+    assert app._parse_number("МАКСИМАЛЬНОЕ", "group_0_shaft_depth_mm") == "МАКСИМАЛЬНОЕ"
+    assert app._parse_number("МАКСИМАЛЬНОЕ", "group_0_stops") is None
+    assert warnings == ["Поле содержит нечисловое значение: МАКСИМАЛЬНОЕ"]
+
+
 def test_stops_do_not_overwrite_doors_for_through_cabin(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_drafts": [{
