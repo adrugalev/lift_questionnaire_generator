@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
 from pydantic import ValidationError
 
 from src.additional_options import ADDITIONAL_OPTION_FIELDS, ADDITIONAL_OPTION_TRANSLATIONS
@@ -24,6 +25,10 @@ from src.validators import MGN_ACCESSIBILITY_WARNING, ValidationMessage, validat
 
 
 ROOT = Path(__file__).resolve().parent
+GROUP_NAVIGATOR_COMPONENT = components.declare_component(
+    "group_navigator",
+    path=str(ROOT / "components" / "group_navigator"),
+)
 DEFAULT_TEMPLATE = ROOT / "templates" / "questionnaire_template.xlsx"
 MAPPING_PATH = ROOT / "data" / "excel_mapping.json"
 OPTIONS_PATH = ROOT / "data" / "options.json"
@@ -2036,14 +2041,74 @@ def _render_group_navigation(groups: list[dict[str, Any]]) -> None:
     nav_items = _group_navigation_items(groups)
     if not nav_items:
         return
-    cols = st.columns(min(len(nav_items), 8))
-    for item_index, (group_index, label) in enumerate(nav_items):
-        with cols[item_index % len(cols)]:
-            button_type = "primary" if group_index == st.session_state.active_group_index else "secondary"
-            st.markdown('<span class="group-nav-button-marker"></span>', unsafe_allow_html=True)
-            if st.button(label, key=f"group_nav_{group_index}", type=button_type, use_container_width=True):
-                _activate_group(group_index)
-                st.rerun()
+    event = GROUP_NAVIGATOR_COMPONENT(
+        items=[{"id": str(group_index), "label": label} for group_index, label in nav_items],
+        active_id=str(st.session_state.active_group_index),
+        key="group_navigator",
+        default=None,
+    )
+    _handle_group_navigation_event(event)
+
+
+def _handle_group_navigation_event(event: Any) -> None:
+    if not isinstance(event, dict):
+        return
+    event_id = str(event.get("event_id") or "")
+    if not event_id or event_id == st.session_state.get("group_navigation_event_id"):
+        return
+    st.session_state.group_navigation_event_id = event_id
+
+    action = event.get("action")
+    if action == "select":
+        selected = _delete_group_index_value(event.get("selected_id"))
+        if selected is None or selected < 0 or selected >= st.session_state.group_count:
+            return
+        _activate_group(selected)
+        st.rerun()
+
+    if action == "reorder":
+        order = [_delete_group_index_value(value) for value in event.get("order", [])]
+        if any(index is None for index in order):
+            return
+        if _reorder_groups([int(index) for index in order if index is not None]):
+            st.rerun()
+
+
+def _reorder_groups(order: list[int]) -> bool:
+    _normalize_group_lists()
+    expected = list(range(st.session_state.group_count))
+    if len(order) != len(expected) or sorted(order) != expected or order == expected:
+        return False
+
+    groups = [
+        _collect_group_from_state(index, _group_defaults(index))
+        for index in expected
+    ]
+    active_sections = [
+        _normalize_group_section_name(st.session_state.get(f"group_{index}_active_section"))
+        for index in expected
+    ]
+    extracted_fields = [set(fields) for fields in st.session_state.extracted_group_fields]
+    active_index = int(st.session_state.active_group_index)
+    first_lift_name = _lift_name_for_quantity(groups[0].get("lift_name"), 1)
+
+    reordered_groups = [dict(groups[index]) for index in order]
+    if first_lift_name:
+        reordered_groups[0]["lift_name"] = _lift_name_for_quantity(
+            first_lift_name,
+            reordered_groups[0].get("quantity"),
+        )
+        _renumber_following_group_lift_names(reordered_groups, 0)
+
+    st.session_state.prefill_groups = [dict(group) for group in reordered_groups]
+    st.session_state.extracted_group_fields = [extracted_fields[index] for index in order]
+    st.session_state.active_group_index = order.index(active_index)
+    _sync_group_widgets_from_group_data(reordered_groups)
+    for new_index, old_index in enumerate(order):
+        section = active_sections[old_index]
+        if section:
+            st.session_state[f"group_{new_index}_active_section"] = section
+    return True
 
 
 def _activate_group(index: int) -> None:

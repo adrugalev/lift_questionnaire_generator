@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: "Source Sans Pro", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    #navigator {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+      width: 100%;
+      padding: 0;
+    }
+
+    .group-item {
+      display: flex;
+      flex: 1 1 170px;
+      align-items: center;
+      justify-content: center;
+      min-width: 140px;
+      min-height: 50px;
+      padding: 9px 34px 9px 18px;
+      border: 1px solid #83b6ff;
+      border-radius: 8px;
+      background: #edf5ff;
+      color: #154f9e;
+      font-size: 16px;
+      line-height: 1.25;
+      text-align: center;
+      cursor: grab;
+      position: relative;
+      touch-action: none;
+      user-select: none;
+      transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .group-item::after {
+      content: "⋮⋮";
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      color: #5c86bd;
+      font-size: 15px;
+      line-height: 1;
+      transform: translateY(-50%) rotate(90deg);
+      opacity: 0.75;
+    }
+
+    .group-item:hover {
+      border-color: #3b82f6;
+      background: #e2efff;
+    }
+
+    .group-item:focus-visible {
+      outline: 3px solid rgba(37, 99, 235, 0.35);
+      outline-offset: 1px;
+    }
+
+    .group-item.active {
+      border-color: #2563eb;
+      background: #2f67e8;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .group-item.active::after {
+      color: #fff;
+    }
+
+    .group-item.dragging {
+      cursor: grabbing;
+      opacity: 0.48;
+      box-shadow: 0 6px 18px rgba(21, 79, 158, 0.18);
+    }
+
+    .group-item.drop-before {
+      box-shadow: -5px 0 0 #2563eb;
+    }
+
+    .group-item.drop-after {
+      box-shadow: 5px 0 0 #2563eb;
+    }
+  </style>
+</head>
+<body>
+  <div id="navigator" aria-label="Навигация по группам лифтов"></div>
+  <script>
+    const navigatorElement = document.getElementById("navigator");
+    let currentArgs = {items: [], active_id: "0"};
+    let draggedElement = null;
+    let pointerDrag = null;
+    let dragOccurred = false;
+    let eventCounter = 0;
+
+    function sendStreamlitMessage(type, payload = {}) {
+      window.parent.postMessage({isStreamlitMessage: true, type, ...payload}, "*");
+    }
+
+    function setFrameHeight() {
+      const height = Math.max(1, Math.ceil(document.documentElement.scrollHeight));
+      sendStreamlitMessage("streamlit:setFrameHeight", {height});
+    }
+
+    function setComponentValue(value) {
+      sendStreamlitMessage("streamlit:setComponentValue", {value, dataType: "json"});
+    }
+
+    function nextEventId() {
+      eventCounter += 1;
+      return `${Date.now().toString(36)}-${eventCounter}`;
+    }
+
+    function emitSelection(id) {
+      setComponentValue({
+        action: "select",
+        selected_id: id,
+        event_id: nextEventId(),
+      });
+    }
+
+    function emitOrder() {
+      setComponentValue({
+        action: "reorder",
+        order: [...navigatorElement.querySelectorAll(".group-item")].map(item => item.dataset.id),
+        event_id: nextEventId(),
+      });
+    }
+
+    function clearDropIndicators() {
+      navigatorElement.querySelectorAll(".group-item").forEach(item => {
+        item.classList.remove("drop-before", "drop-after");
+      });
+    }
+
+    function render(args) {
+      currentArgs = args || currentArgs;
+      navigatorElement.replaceChildren();
+      const items = Array.isArray(currentArgs.items) ? currentArgs.items : [];
+      const activeId = String(currentArgs.active_id ?? "0");
+
+      items.forEach(item => {
+        const element = document.createElement("button");
+        element.type = "button";
+        element.className = "group-item";
+        element.dataset.id = String(item.id);
+        element.draggable = false;
+        element.textContent = String(item.label || "");
+        element.title = "Нажмите для открытия или перетащите, чтобы изменить порядок";
+        element.setAttribute("aria-pressed", String(item.id) === activeId ? "true" : "false");
+        if (String(item.id) === activeId) {
+          element.classList.add("active");
+        }
+
+        element.addEventListener("click", () => {
+          if (dragOccurred) {
+            dragOccurred = false;
+            return;
+          }
+          navigatorElement.querySelectorAll(".group-item").forEach(node => {
+            node.classList.toggle("active", node === element);
+            node.setAttribute("aria-pressed", node === element ? "true" : "false");
+          });
+          emitSelection(element.dataset.id);
+        });
+
+        element.addEventListener("pointerdown", event => {
+          if (event.button !== 0) return;
+          draggedElement = element;
+          pointerDrag = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            moved: false,
+          };
+        });
+
+        navigatorElement.appendChild(element);
+      });
+      window.requestAnimationFrame(setFrameHeight);
+    }
+
+    window.addEventListener("pointermove", event => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId || !draggedElement) return;
+      const distance = Math.hypot(event.clientX - pointerDrag.startX, event.clientY - pointerDrag.startY);
+      if (!pointerDrag.moved && distance < 6) return;
+      pointerDrag.moved = true;
+      dragOccurred = true;
+      draggedElement.classList.add("dragging");
+
+      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".group-item");
+      if (!target || target === draggedElement) return;
+      const rectangle = target.getBoundingClientRect();
+      const insertAfter = event.clientX > rectangle.left + rectangle.width / 2;
+      navigatorElement.insertBefore(draggedElement, insertAfter ? target.nextSibling : target);
+    });
+
+    window.addEventListener("pointerup", event => {
+      if (!pointerDrag || pointerDrag.pointerId !== event.pointerId || !draggedElement) return;
+      const moved = pointerDrag.moved;
+      draggedElement.classList.remove("dragging");
+      draggedElement = null;
+      pointerDrag = null;
+      if (moved) {
+        emitOrder();
+        setFrameHeight();
+        window.setTimeout(() => { dragOccurred = false; }, 250);
+      }
+    });
+
+    window.addEventListener("pointercancel", () => {
+      if (draggedElement) draggedElement.classList.remove("dragging");
+      draggedElement = null;
+      pointerDrag = null;
+      dragOccurred = false;
+      render(currentArgs);
+    });
+
+    window.addEventListener("message", event => {
+      if (event.data?.type === "streamlit:render") {
+        render(event.data.args || {});
+      }
+    });
+
+    new ResizeObserver(setFrameHeight).observe(document.body);
+    sendStreamlitMessage("streamlit:componentReady", {apiVersion: 1});
+    setFrameHeight();
+  </script>
+</body>
+</html>

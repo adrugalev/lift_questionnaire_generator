@@ -2260,3 +2260,51 @@ def test_delete_only_group_clears_it(monkeypatch) -> None:
     assert session_state["extracted_group_fields"] == [set()]
     assert "group_0_section" not in session_state
     assert "group_0_capacity_kg" not in session_state
+def test_reorder_groups_moves_data_and_renumbers_lifts(monkeypatch) -> None:
+    section_names = list(app.FIELD_GROUPS)
+    session_state = FakeSessionState({
+        "group_count": 3,
+        "prefill_groups": [
+            {"section": "A", "lift_name": "L1-L2", "quantity": 2},
+            {"section": "B", "lift_name": "L3", "quantity": 1},
+            {"section": "C", "lift_name": "L4-L6", "quantity": 3},
+        ],
+        "group_drafts": [
+            {"section": "A", "lift_name": "L1-L2", "quantity": 2},
+            {"section": "B", "lift_name": "L3", "quantity": 1},
+            {"section": "C", "lift_name": "L4-L6", "quantity": 3},
+        ],
+        "extracted_group_fields": [{"section"}, {"lift_name"}, {"quantity"}],
+        "active_group_index": 0,
+        "group_section_widget_revision": 0,
+        "group_0_active_section": section_names[0],
+        "group_1_active_section": section_names[1],
+        "group_2_active_section": section_names[2],
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._reorder_groups([2, 0, 1]) is True
+
+    assert [group["section"] for group in session_state.group_drafts] == ["C", "A", "B"]
+    assert [group["lift_name"] for group in session_state.group_drafts] == ["L1-L3", "L4-L5", "L6"]
+    assert session_state.extracted_group_fields == [{"quantity"}, {"section"}, {"lift_name"}]
+    assert session_state.active_group_index == 1
+    assert session_state["group_0_active_section"] == section_names[2]
+    assert session_state["group_1_active_section"] == section_names[0]
+    assert session_state["group_2_active_section"] == section_names[1]
+
+
+def test_reorder_groups_ignores_invalid_or_unchanged_order(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 2,
+        "prefill_groups": [{"section": "A"}, {"section": "B"}],
+        "group_drafts": [{"section": "A"}, {"section": "B"}],
+        "extracted_group_fields": [set(), set()],
+        "active_group_index": 0,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._reorder_groups([0, 1]) is False
+    assert app._reorder_groups([1, 1]) is False
+    assert [group["section"] for group in session_state.group_drafts] == ["A", "B"]
+
