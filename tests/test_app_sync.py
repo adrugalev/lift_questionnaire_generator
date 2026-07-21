@@ -1129,12 +1129,18 @@ def test_image_preview_html_uses_fixed_thumbnail_container(tmp_path) -> None:
 
     preview = app._image_preview_html(image_path)
 
-    assert 'class="image-picker-thumb"' in preview
     assert "data:image/png;base64," in preview
+    assert 'class="image-picker-thumb image-lightbox-trigger"' in preview
+    assert 'class="image-lightbox"' in preview
+    assert 'href="#image-lightbox-close"' in preview
 
 
 def test_inline_thumbnail_css_fits_full_image() -> None:
-    assert "object-fit: contain;" in app._filled_field_styles_css()
+    css = app._filled_field_styles_css()
+
+    assert "object-fit: contain;" in css
+    assert ".image-lightbox:target" in css
+    assert "cursor: zoom-out;" in css
 
 
 def test_project_summary_breakdown_uses_small_text_and_keeps_values_aligned() -> None:

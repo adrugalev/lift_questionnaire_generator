@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import html
 import json
 import random
@@ -986,11 +987,76 @@ def _filled_field_styles_css() -> str:
             width: 2.5rem;
         }
 
+        .image-lightbox-trigger {
+            cursor: zoom-in;
+            text-decoration: none !important;
+            transition: border-color 120ms ease, box-shadow 120ms ease;
+        }
+
+        .image-lightbox-trigger:hover {
+            border-color: #6b7280;
+            box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.14);
+        }
+
         .image-picker-thumb img {
             display: block;
             height: 100%;
             object-fit: contain;
             width: 100%;
+        }
+
+        .image-lightbox {
+            align-items: center;
+            background: rgba(15, 23, 42, 0.78);
+            box-sizing: border-box;
+            cursor: zoom-out;
+            display: none;
+            inset: 0;
+            justify-content: center;
+            padding: 2rem;
+            position: fixed;
+            text-decoration: none !important;
+            z-index: 1000000;
+        }
+
+        .image-lightbox:target {
+            display: flex;
+        }
+
+        .image-lightbox-content {
+            align-items: center;
+            background: #ffffff;
+            border-radius: 0.5rem;
+            box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.35);
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            max-height: 92vh;
+            max-width: min(92vw, 72rem);
+            padding: 1rem;
+            pointer-events: none;
+        }
+
+        .image-lightbox-content img {
+            display: block;
+            max-height: calc(92vh - 5rem);
+            max-width: min(88vw, 68rem);
+            object-fit: contain;
+        }
+
+        .image-lightbox-caption {
+            color: #111827;
+            font-size: 0.95rem;
+            line-height: 1.35;
+            text-align: center;
+        }
+
+        .selected-image-card-preview {
+            align-items: center;
+            display: flex;
+            flex: 0 0 auto;
+            justify-content: center;
         }
 
         button[data-testid="stPopoverButton"] {
@@ -2671,7 +2737,7 @@ def _image_select_widget(
     if show_inline_preview:
         with field_cols[1]:
             preview_path = _image_path_for_value(option_key, selected)
-            st.markdown(_image_preview_html(preview_path), unsafe_allow_html=True)
+            st.markdown(_image_preview_html(preview_path, key, selected), unsafe_allow_html=True)
     with picker_col:
         _image_option_picker(label, option_key, key, group_index, field)
     return selected
@@ -2859,27 +2925,63 @@ def _image_picker_dialog(label: str, option_key: str, key: str, group_index: int
                     st.rerun()
 
 
-def _image_preview_html(path: Path | None) -> str:
+def _image_preview_html(
+    path: Path | None,
+    lightbox_key: str | None = None,
+    caption: str | None = None,
+) -> str:
     if not path or not path.exists():
         return '<div class="image-picker-thumb"></div>'
     mime_type, encoded = _image_data_uri_parts(path)
+    alt = caption or path.stem
+    lightbox_id = _image_lightbox_id(lightbox_key or str(path))
     return (
-        '<div class="image-picker-thumb">'
-        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(path.stem)}">'
-        "</div>"
+        f'<a class="image-picker-thumb image-lightbox-trigger" href="#{lightbox_id}" '
+        f'aria-label="Увеличить: {html.escape(alt, quote=True)}">'
+        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(alt, quote=True)}">'
+        "</a>"
+        + _image_lightbox_html(lightbox_id, mime_type, encoded, alt)
     )
 
 
 def _selected_image_card_html(label: str, value: str, path: Path) -> str:
     mime_type, encoded = _image_data_uri_parts(path)
+    lightbox_id = _image_lightbox_id(label, value, str(path))
     return (
         '<div class="selected-image-card">'
-        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(value)}">'
+        f'<a class="selected-image-card-preview image-lightbox-trigger" href="#{lightbox_id}" '
+        f'aria-label="Увеличить: {html.escape(value, quote=True)}">'
+        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(value, quote=True)}">'
+        "</a>"
         "<div>"
         f'<div class="selected-image-card-title">{html.escape(label)}</div>'
         f'<div class="selected-image-card-value">{html.escape(value)}</div>'
         "</div>"
         "</div>"
+        + _image_lightbox_html(lightbox_id, mime_type, encoded, value)
+    )
+
+
+def _image_lightbox_id(*parts: str) -> str:
+    digest = hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:14]
+    return f"image-lightbox-{digest}"
+
+
+def _image_lightbox_html(
+    lightbox_id: str,
+    mime_type: str,
+    encoded: str,
+    caption: str,
+) -> str:
+    escaped_caption = html.escape(caption)
+    return (
+        f'<a id="{lightbox_id}" class="image-lightbox" href="#image-lightbox-close" '
+        f'aria-label="Закрыть увеличенное изображение {html.escape(caption, quote=True)}">'
+        '<span class="image-lightbox-content">'
+        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(caption, quote=True)}">'
+        f'<span class="image-lightbox-caption">{escaped_caption}</span>'
+        "</span>"
+        "</a>"
     )
 
 
