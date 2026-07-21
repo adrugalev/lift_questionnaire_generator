@@ -578,7 +578,7 @@ def _apply_random_additional_options(group: dict[str, Any]) -> None:
 def main() -> None:
     st.set_page_config(page_title="Генератор опросных листов EPSS", layout="wide")
     _inject_filled_field_styles()
-    options = OptionsManager(OPTIONS_PATH)
+    options = _options_manager()
     _init_state()
     _apply_pending_draft_restore()
     st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
@@ -595,6 +595,17 @@ def main() -> None:
     if questionnaire:
         _validation_block(questionnaire)
         _download_block(questionnaire)
+
+
+def _options_manager() -> OptionsManager:
+    modified_ns = OPTIONS_PATH.stat().st_mtime_ns if OPTIONS_PATH.exists() else 0
+    return _cached_options_manager(str(OPTIONS_PATH), modified_ns)
+
+
+@st.cache_resource(show_spinner=False)
+def _cached_options_manager(path: str, modified_ns: int) -> OptionsManager:
+    del modified_ns
+    return OptionsManager(path)
 
 
 def _inject_filled_field_styles() -> None:
@@ -1738,10 +1749,21 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     if group_sync_notice:
         st.success(group_sync_notice)
 
-    groups = nav_groups
+    _render_active_group_form(options)
+    return [
+        _collect_group_from_state(group_index, _group_defaults(group_index))
+        for group_index in range(st.session_state.group_count)
+    ]
+
+
+@st.fragment
+def _render_active_group_form(options: OptionsManager) -> None:
+    if st.session_state.pop("group_field_app_refresh_requested", False):
+        st.rerun(scope="app")
+
     index = int(st.session_state.active_group_index)
     defaults = _group_defaults(index)
-    group = groups[index]
+    group = _collect_group_from_state(index, defaults)
     with st.expander(_group_display_label(index), expanded=True):
         section_names = list(FIELD_GROUPS.keys())
         completed_sections = _completed_sections(group)
@@ -1787,8 +1809,6 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
                 _render_group_field_grid(fields, column_count, group, defaults, options, index)
             if section == "Сигнализация":
                 _render_selected_image_previews(fields, group)
-    groups[index] = group
-    return groups
 
 
 def _add_group() -> None:
@@ -2418,7 +2438,7 @@ def _field_widget(
             values,
             index=index,
             key=key,
-            on_change=_save_group_widget_value,
+            on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
         )
         return _parse_number(str(selected), key) if selected else None
@@ -2438,7 +2458,7 @@ def _field_widget(
             values,
             index=index,
             key=key,
-            on_change=_save_group_widget_value,
+            on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
         )
         return _parse_number(str(selected), key) if selected else None
@@ -2448,7 +2468,7 @@ def _field_widget(
             value="" if default is None else str(default),
             key=key,
             placeholder=" ",
-            on_change=_save_group_widget_value,
+            on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
         )
         if field == "doors_count" and _is_through_cabin_for_group(group_index, _ensure_group_draft(group_index)):
@@ -2461,7 +2481,7 @@ def _field_widget(
             key=key,
             height=100,
             placeholder=" ",
-            on_change=_save_group_widget_value,
+            on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
         )
     if kind == "checkbox_yes_no":
@@ -2470,7 +2490,7 @@ def _field_widget(
             label,
             value=current,
             key=key,
-            on_change=_save_group_checkbox_value,
+            on_change=_save_group_checkbox_value_from_fragment,
             args=(group_index, field, key),
         )
         return "ДА" if checked else "НЕТ"
@@ -2504,7 +2524,7 @@ def _field_widget(
                 values,
                 index=index,
                 key=key,
-                on_change=_save_group_widget_value,
+                on_change=_save_group_widget_value_from_fragment,
                 args=(group_index, field, key),
             )
         if selected == OTHER_OPTION:
@@ -2512,7 +2532,7 @@ def _field_widget(
                 f"{label}: другое значение",
                 key=f"{key}_custom",
                 placeholder=" ",
-                on_change=_save_group_custom_value,
+                on_change=_save_group_custom_value_from_fragment,
                 args=(group_index, field, f"{key}_custom"),
             )
             if custom:
@@ -2524,7 +2544,7 @@ def _field_widget(
         value=str(default or ""),
         key=key,
         placeholder=" ",
-        on_change=_save_group_widget_value,
+        on_change=_save_group_widget_value_from_fragment,
         args=(group_index, field, key),
     ) or None
 
@@ -2538,7 +2558,7 @@ def _main_landing_floor_widget(label: str, key: str, default: Any, group_index: 
             value=str(default or ""),
             key=key,
             placeholder=" ",
-            on_change=_save_group_widget_value,
+            on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
         ) or None
 
@@ -2557,7 +2577,7 @@ def _main_landing_floor_widget(label: str, key: str, default: Any, group_index: 
         values,
         index=index,
         key=key,
-        on_change=_save_group_widget_value,
+        on_change=_save_group_widget_value_from_fragment,
         args=(group_index, field, key),
         accept_new_options=True,
     )
@@ -2645,7 +2665,7 @@ def _image_select_widget(
             index=index,
             key=key,
             label_visibility="collapsed",
-            on_change=_save_group_widget_value,
+            on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
         )
     if show_inline_preview:
@@ -2665,6 +2685,32 @@ def _image_options_for_key(option_key: str) -> dict[str, Path]:
     folder = _image_option_dir_for_key(option_key)
     if not folder or not folder.exists():
         return {}
+    try:
+        modified_ns = folder.stat().st_mtime_ns
+    except OSError:
+        return {}
+    prefixes = tuple(IMAGE_OPTION_PREFIX_FILTERS.get(option_key, ()))
+    excluded_articles = tuple(sorted(EXCLUDED_IMAGE_OPTION_ARTICLES.get(option_key, set())))
+    cached_options = _cached_image_options_for_folder(
+        option_key,
+        str(folder),
+        modified_ns,
+        prefixes,
+        excluded_articles,
+    )
+    return {label: Path(path) for label, path in cached_options}
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _cached_image_options_for_folder(
+    option_key: str,
+    folder_path: str,
+    modified_ns: int,
+    prefixes: tuple[str, ...],
+    excluded_articles: tuple[str, ...],
+) -> tuple[tuple[str, str], ...]:
+    del modified_ns, prefixes, excluded_articles
+    folder = Path(folder_path)
     files = [
         path
         for path in folder.iterdir()
@@ -2673,7 +2719,8 @@ def _image_options_for_key(option_key: str) -> dict[str, Path]:
         and _matches_image_option_filter(option_key, path)
     ]
     options = {_image_option_label(path, option_key): path for path in files}
-    return dict(sorted(options.items(), key=lambda item: _image_option_sort_key(option_key, item[0], item[1])))
+    sorted_options = sorted(options.items(), key=lambda item: _image_option_sort_key(option_key, item[0], item[1]))
+    return tuple((label, str(path)) for label, path in sorted_options)
 
 
 def _image_option_dir_for_key(option_key: str) -> Path | None:
@@ -2815,8 +2862,7 @@ def _image_picker_dialog(label: str, option_key: str, key: str, group_index: int
 def _image_preview_html(path: Path | None) -> str:
     if not path or not path.exists():
         return '<div class="image-picker-thumb"></div>'
-    mime_type = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else f"image/{path.suffix.lower().lstrip('.')}"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    mime_type, encoded = _image_data_uri_parts(path)
     return (
         '<div class="image-picker-thumb">'
         f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(path.stem)}">'
@@ -2825,8 +2871,7 @@ def _image_preview_html(path: Path | None) -> str:
 
 
 def _selected_image_card_html(label: str, value: str, path: Path) -> str:
-    mime_type = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else f"image/{path.suffix.lower().lstrip('.')}"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    mime_type, encoded = _image_data_uri_parts(path)
     return (
         '<div class="selected-image-card">'
         f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(value)}">'
@@ -2839,14 +2884,34 @@ def _selected_image_card_html(label: str, value: str, path: Path) -> str:
 
 
 def _dialog_image_tile_html(label: str, path: Path) -> str:
-    mime_type = "image/jpeg" if path.suffix.lower() in {".jpg", ".jpeg"} else f"image/{path.suffix.lower().lstrip('.')}"
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    mime_type, encoded = _image_data_uri_parts(path)
     return (
         '<div class="image-dialog-tile">'
         f'<div class="image-dialog-image"><img src="data:{mime_type};base64,{encoded}" alt="{html.escape(label)}"></div>'
         f'<div class="image-dialog-label">{html.escape(label)}</div>'
         "</div>"
     )
+
+
+def _image_data_uri_parts(path: Path) -> tuple[str, str]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return "image/png", ""
+    return _cached_image_data_uri_parts(str(path), stat.st_mtime_ns, stat.st_size)
+
+
+@st.cache_data(show_spinner=False, max_entries=512)
+def _cached_image_data_uri_parts(path: str, modified_ns: int, size: int) -> tuple[str, str]:
+    del modified_ns, size
+    image_path = Path(path)
+    mime_type = (
+        "image/jpeg"
+        if image_path.suffix.lower() in {".jpg", ".jpeg"}
+        else f"image/{image_path.suffix.lower().lstrip('.')}"
+    )
+    encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    return mime_type, encoded
 
 
 def _apply_pending_widget_choice(key: str, group_index: int, field: str, default: Any) -> Any:
@@ -2924,6 +2989,11 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
         _renumber_following_group_lift_names_in_state(group_index)
 
 
+def _save_group_widget_value_from_fragment(group_index: int, field: str, key: str) -> None:
+    _save_group_widget_value(group_index, field, key)
+    st.session_state.group_field_app_refresh_requested = True
+
+
 def _change_group_section(group_index: int, section_widget_key: str) -> None:
     section = _normalize_group_section_name(st.session_state.get(section_widget_key))
     if section:
@@ -2940,6 +3010,11 @@ def _save_group_custom_value(group_index: int, field: str, key: str) -> None:
         _sync_empty_wall_finish_fields(group_index, field, value)
 
 
+def _save_group_custom_value_from_fragment(group_index: int, field: str, key: str) -> None:
+    _save_group_custom_value(group_index, field, key)
+    st.session_state.group_field_app_refresh_requested = True
+
+
 def _save_group_checkbox_value(group_index: int, field: str, key: str) -> None:
     draft = _ensure_group_draft(group_index)
     checked = bool(st.session_state.get(key))
@@ -2951,6 +3026,11 @@ def _save_group_checkbox_value(group_index: int, field: str, key: str) -> None:
         voice_key = f"group_{group_index}_{MGN_VOICE_OPTION_FIELD}"
         st.session_state[voice_key] = True
         draft[MGN_VOICE_OPTION_FIELD] = "ДА"
+
+
+def _save_group_checkbox_value_from_fragment(group_index: int, field: str, key: str) -> None:
+    _save_group_checkbox_value(group_index, field, key)
+    st.session_state.group_field_app_refresh_requested = True
 
 
 def _truthy_yes_no(value: Any) -> bool:
