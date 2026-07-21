@@ -2314,5 +2314,5 @@ def test_group_navigator_has_visible_drag_feedback() -> None:
     assert "drag-ghost" in component_html
     assert "beginVisualDrag" in component_html
     assert "moveDragGhost" in component_html
-
+    assert "placePlaceholder" in component_html
 

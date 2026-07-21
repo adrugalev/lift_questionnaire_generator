@@ -217,6 +217,41 @@
       pointerDrag.placeholder.remove();
     }
 
+    function placePlaceholder(clientX, clientY) {
+      if (!pointerDrag?.placeholder) return;
+      const items = [...navigatorElement.querySelectorAll(".group-item")];
+      if (!items.length) {
+        navigatorElement.appendChild(pointerDrag.placeholder);
+        return;
+      }
+
+      const rows = [];
+      items.forEach(item => {
+        const rectangle = item.getBoundingClientRect();
+        const centerY = rectangle.top + rectangle.height / 2;
+        let row = rows.find(candidate => Math.abs(candidate.centerY - centerY) < rectangle.height / 2);
+        if (!row) {
+          row = {centerY, items: []};
+          rows.push(row);
+        }
+        row.items.push({item, rectangle});
+      });
+
+      const nearestRow = rows.reduce((nearest, row) => (
+        Math.abs(row.centerY - clientY) < Math.abs(nearest.centerY - clientY) ? row : nearest
+      ));
+      const insertionTarget = nearestRow.items.find(({rectangle}) => (
+        clientX < rectangle.left + rectangle.width / 2
+      ));
+      if (insertionTarget) {
+        navigatorElement.insertBefore(pointerDrag.placeholder, insertionTarget.item);
+        return;
+      }
+
+      const lastInRow = nearestRow.items[nearestRow.items.length - 1].item;
+      navigatorElement.insertBefore(pointerDrag.placeholder, lastInRow.nextSibling);
+    }
+
     function render(args) {
       currentArgs = args || currentArgs;
       navigatorElement.replaceChildren();
@@ -267,17 +302,13 @@
     window.addEventListener("pointermove", event => {
       if (!pointerDrag || pointerDrag.pointerId !== event.pointerId || !draggedElement) return;
       const distance = Math.hypot(event.clientX - pointerDrag.startX, event.clientY - pointerDrag.startY);
-      if (!pointerDrag.moved && distance < 6) return;
+      if (!pointerDrag.moved && distance < 3) return;
       pointerDrag.moved = true;
       dragOccurred = true;
       beginVisualDrag(event);
       moveDragGhost(event);
 
-      const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".group-item");
-      if (!target || !pointerDrag.placeholder) return;
-      const rectangle = target.getBoundingClientRect();
-      const insertAfter = event.clientX > rectangle.left + rectangle.width / 2;
-      navigatorElement.insertBefore(pointerDrag.placeholder, insertAfter ? target.nextSibling : target);
+      placePlaceholder(event.clientX, event.clientY);
     });
 
     window.addEventListener("pointerup", event => {
