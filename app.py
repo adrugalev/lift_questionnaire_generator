@@ -2404,7 +2404,7 @@ def _collect_group_from_state(index: int, defaults: dict[str, Any]) -> dict[str,
                 group[field] = value
                 draft[field] = value
     if group.get("stops") not in ("", None):
-        _apply_stops_derived_fields(index, group.get("stops"))
+        _apply_stops_derived_fields(index, group.get("stops"), sync_widgets=False)
         if not _is_through_cabin_for_group(index, draft):
             group["doors_count"] = draft.get("doors_count")
         group["button_marking"] = draft.get("button_marking")
@@ -3058,7 +3058,12 @@ def _sync_empty_wall_finish_fields(group_index: int, source_field: str, value: A
             st.session_state[key] = value
 
 
-def _apply_stops_derived_fields(group_index: int, stops_value: Any) -> None:
+def _apply_stops_derived_fields(
+    group_index: int,
+    stops_value: Any,
+    *,
+    sync_widgets: bool = True,
+) -> None:
     stops = _parse_number(str(stops_value), f"group_{group_index}_stops")
     if stops is None:
         return
@@ -3072,8 +3077,10 @@ def _apply_stops_derived_fields(group_index: int, stops_value: Any) -> None:
     draft["button_marking"] = button_marking
     if not _is_through_cabin_for_group(group_index, draft):
         draft["doors_count"] = stops
-        st.session_state[f"group_{group_index}_doors_count"] = str(stops)
-    st.session_state[f"group_{group_index}_button_marking"] = button_marking
+        if sync_widgets:
+            st.session_state[f"group_{group_index}_doors_count"] = str(stops)
+    if sync_widgets:
+        st.session_state[f"group_{group_index}_button_marking"] = button_marking
 
 
 def _is_through_cabin_for_group(group_index: int, draft: dict[str, Any]) -> bool:

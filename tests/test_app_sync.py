@@ -1556,6 +1556,20 @@ def test_stops_update_button_marking_with_underground_floors(monkeypatch) -> Non
     assert session_state["group_0_button_marking"] == "-2, -1, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"
 
 
+def test_stops_can_update_draft_without_mutating_rendered_widgets(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_drafts": [{}],
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._apply_stops_derived_fields(0, "12", sync_widgets=False)
+
+    assert session_state["group_drafts"][0]["doors_count"] == 12
+    assert session_state["group_drafts"][0]["button_marking"] == "1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12"
+    assert "group_0_doors_count" not in session_state
+    assert "group_0_button_marking" not in session_state
+
+
 def test_parse_number_ignores_empty_none_values(monkeypatch) -> None:
     warnings: list[str] = []
     monkeypatch.setattr(app.st, "warning", warnings.append)
