@@ -86,16 +86,48 @@
 
     .group-item.dragging {
       cursor: grabbing;
-      opacity: 0.48;
-      box-shadow: 0 6px 18px rgba(21, 79, 158, 0.18);
+      opacity: 0.25;
     }
 
-    .group-item.drop-before {
-      box-shadow: -5px 0 0 #2563eb;
+    body.is-dragging,
+    body.is-dragging * {
+      cursor: grabbing !important;
     }
 
-    .group-item.drop-after {
-      box-shadow: 5px 0 0 #2563eb;
+    .group-placeholder {
+      flex: 1 1 170px;
+      min-width: 140px;
+      min-height: 50px;
+      border: 2px dashed #2563eb;
+      border-radius: 8px;
+      background: rgba(37, 99, 235, 0.09);
+      box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.06);
+    }
+
+    .drag-ghost {
+      position: fixed;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 50px;
+      margin: 0;
+      padding: 9px 18px;
+      border: 2px solid #2563eb;
+      border-radius: 8px;
+      background: #fff;
+      color: #154f9e;
+      font: 600 16px/1.25 "Source Sans Pro", sans-serif;
+      text-align: center;
+      pointer-events: none;
+      transform: rotate(1deg) scale(1.025);
+      box-shadow: 0 14px 32px rgba(21, 79, 158, 0.3);
+      opacity: 0.97;
+    }
+
+    .drag-ghost.active {
+      background: #2f67e8;
+      color: #fff;
     }
   </style>
 </head>
@@ -143,10 +175,46 @@
       });
     }
 
-    function clearDropIndicators() {
-      navigatorElement.querySelectorAll(".group-item").forEach(item => {
-        item.classList.remove("drop-before", "drop-after");
-      });
+    function beginVisualDrag(event) {
+      if (!pointerDrag || !draggedElement || pointerDrag.ghost) return;
+      const rectangle = draggedElement.getBoundingClientRect();
+      const ghost = document.createElement("div");
+      ghost.className = `drag-ghost${draggedElement.classList.contains("active") ? " active" : ""}`;
+      ghost.textContent = draggedElement.textContent;
+      ghost.style.width = `${rectangle.width}px`;
+      ghost.style.height = `${rectangle.height}px`;
+
+      const placeholder = document.createElement("div");
+      placeholder.className = "group-placeholder";
+      placeholder.style.flexBasis = `${rectangle.width}px`;
+      navigatorElement.insertBefore(placeholder, draggedElement);
+      draggedElement.remove();
+
+      pointerDrag.ghost = ghost;
+      pointerDrag.placeholder = placeholder;
+      pointerDrag.offsetX = pointerDrag.startX - rectangle.left;
+      pointerDrag.offsetY = pointerDrag.startY - rectangle.top;
+      document.body.appendChild(ghost);
+      document.body.classList.add("is-dragging");
+      moveDragGhost(event);
+    }
+
+    function moveDragGhost(event) {
+      if (!pointerDrag?.ghost) return;
+      pointerDrag.ghost.style.left = `${event.clientX - pointerDrag.offsetX}px`;
+      pointerDrag.ghost.style.top = `${event.clientY - pointerDrag.offsetY}px`;
+    }
+
+    function finishVisualDrag() {
+      if (!pointerDrag) return;
+      pointerDrag.ghost?.remove();
+      document.body.classList.remove("is-dragging");
+    }
+
+    function restoreDraggedElement() {
+      if (!pointerDrag?.placeholder || !draggedElement) return;
+      navigatorElement.insertBefore(draggedElement, pointerDrag.placeholder);
+      pointerDrag.placeholder.remove();
     }
 
     function render(args) {
@@ -202,19 +270,21 @@
       if (!pointerDrag.moved && distance < 6) return;
       pointerDrag.moved = true;
       dragOccurred = true;
-      draggedElement.classList.add("dragging");
+      beginVisualDrag(event);
+      moveDragGhost(event);
 
       const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".group-item");
-      if (!target || target === draggedElement) return;
+      if (!target || !pointerDrag.placeholder) return;
       const rectangle = target.getBoundingClientRect();
       const insertAfter = event.clientX > rectangle.left + rectangle.width / 2;
-      navigatorElement.insertBefore(draggedElement, insertAfter ? target.nextSibling : target);
+      navigatorElement.insertBefore(pointerDrag.placeholder, insertAfter ? target.nextSibling : target);
     });
 
     window.addEventListener("pointerup", event => {
       if (!pointerDrag || pointerDrag.pointerId !== event.pointerId || !draggedElement) return;
       const moved = pointerDrag.moved;
-      draggedElement.classList.remove("dragging");
+      restoreDraggedElement();
+      finishVisualDrag();
       draggedElement = null;
       pointerDrag = null;
       if (moved) {
@@ -225,7 +295,7 @@
     });
 
     window.addEventListener("pointercancel", () => {
-      if (draggedElement) draggedElement.classList.remove("dragging");
+      finishVisualDrag();
       draggedElement = null;
       pointerDrag = null;
       dragOccurred = false;

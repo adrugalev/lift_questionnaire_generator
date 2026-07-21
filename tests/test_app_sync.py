@@ -2307,4 +2307,12 @@ def test_reorder_groups_ignores_invalid_or_unchanged_order(monkeypatch) -> None:
     assert app._reorder_groups([0, 1]) is False
     assert app._reorder_groups([1, 1]) is False
     assert [group["section"] for group in session_state.group_drafts] == ["A", "B"]
+def test_group_navigator_has_visible_drag_feedback() -> None:
+    component_html = (app.ROOT / "components" / "group_navigator" / "index.html").read_text(encoding="utf-8")
+
+    assert "group-placeholder" in component_html
+    assert "drag-ghost" in component_html
+    assert "beginVisualDrag" in component_html
+    assert "moveDragGhost" in component_html
+
 
