@@ -34,7 +34,6 @@ ADDITIONAL_OPTIONS = [
         "Удалённое расположение шкафа управления (до 5 метров от шахты)",
         "控制柜远程布置（距井道不超过5米）",
     ),
-    AdditionalOption("option_auto_fan", "Автоматический вентилятор", "自动通风风扇"),
     AdditionalOption("option_russian_voice", "Голосовой информатор на русском языке", "俄语语音报站器"),
     AdditionalOption("option_guide_rails_2_5m", "Направляющие 2,5 м.", "2.5米导轨"),
     AdditionalOption("option_u_bracket", "Тип кронштейна: П-образный", "支架类型：U型"),
@@ -46,7 +45,6 @@ ADDITIONAL_OPTIONS = [
         "Bypass (блокировка вызовов при загрузке кабины более 80%)",
         "Bypass（轿厢载荷超过80%时屏蔽外呼）",
     ),
-    AdditionalOption("option_gesture_call", "Gesture Call", "手势呼梯"),
 ]
 
 ADDITIONAL_OPTION_FIELDS = [(option.field, option.russian) for option in ADDITIONAL_OPTIONS]

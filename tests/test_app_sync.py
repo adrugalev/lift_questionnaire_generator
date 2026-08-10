@@ -1776,6 +1776,38 @@ def test_door_model_and_fire_resistance_are_swapped_in_layout() -> None:
     assert "door_model" in app.SYNCABLE_GROUP_FIELDS
 
 
+def test_capacity_select_accepts_custom_value(monkeypatch) -> None:
+    session_state = FakeSessionState({"group_drafts": [{}]})
+    captured = {}
+
+    def fake_selectbox(label, values, index, key, on_change, args, accept_new_options=False):
+        captured.update(
+            {
+                "values": values,
+                "accept_new_options": accept_new_options,
+            }
+        )
+        return "725"
+
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(app.st, "selectbox", fake_selectbox)
+
+    result = app._field_widget(
+        "Грузоподъемность, кг",
+        "capacity_select",
+        "group_0_capacity_kg",
+        1000,
+        object(),
+        None,
+        0,
+        "capacity_kg",
+    )
+
+    assert result == 725
+    assert captured["accept_new_options"] is True
+    assert "1000" in captured["values"]
+
+
 def test_additional_options_textarea_is_removed_from_additional_section() -> None:
     additional_fields = [field for field, _, _, _ in app.FIELD_GROUPS["Дополнительные опции"]]
     additional_field_kinds = {field: kind for field, _, kind, _ in app.FIELD_GROUPS["Дополнительные опции"]}
@@ -1787,10 +1819,11 @@ def test_additional_options_textarea_is_removed_from_additional_section() -> Non
 
 
 def test_additional_option_fields_have_chinese_translations() -> None:
-    assert len(app.ADDITIONAL_OPTION_TRANSLATIONS) == 19
+    assert len(app.ADDITIONAL_OPTION_TRANSLATIONS) == 17
     assert app.ADDITIONAL_OPTION_TRANSLATIONS["option_cctv_preparation"] == "预留视频监控接口"
     assert app.ADDITIONAL_OPTION_TRANSLATIONS["option_bypass"] == "Bypass（轿厢载荷超过80%时屏蔽外呼）"
-    assert app.ADDITIONAL_OPTION_TRANSLATIONS["option_gesture_call"] == "手势呼梯"
+    assert "option_auto_fan" not in app.ADDITIONAL_OPTION_TRANSLATIONS
+    assert "option_gesture_call" not in app.ADDITIONAL_OPTION_TRANSLATIONS
 
 
 def test_selected_additional_options_are_exported_in_chinese() -> None:
@@ -2315,4 +2348,3 @@ def test_group_navigator_has_visible_drag_feedback() -> None:
     assert "beginVisualDrag" in component_html
     assert "moveDragGhost" in component_html
     assert "placePlaceholder" in component_html
-

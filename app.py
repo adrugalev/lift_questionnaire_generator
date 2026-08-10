@@ -2591,6 +2591,7 @@ def _field_widget(
             key=key,
             on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
+            accept_new_options=True,
         )
         return _parse_number(str(selected), key) if selected else None
     if kind == "number":

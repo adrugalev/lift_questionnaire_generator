@@ -467,7 +467,7 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
                 section="Секция 1",
                 lift_name="Л1",
                 quantity=1,
-                additional_options="预留视频监控接口\n手势呼梯",
+                additional_options="预留视频监控接口\nARD自动救援装置",
             )
         ],
     )
@@ -479,8 +479,8 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
     assert ws["A52"].value == "Подготовка под видеонаблюдение"
     assert ws["B52"].value == "预留视频监控接口"
     assert ws["C52"].value == "ДА"
-    assert ws["A53"].value == "Gesture Call"
-    assert ws["B53"].value == "手势呼梯"
+    assert ws["A53"].value == "ARD — Automatic Rescue Device"
+    assert ws["B53"].value == "ARD自动救援装置"
     assert ws["C53"].value == "ДА"
     assert ws["A54"].value == "Доступность МГН"
 
@@ -493,7 +493,7 @@ def test_factory_rows_use_reference_format_and_clear_blank_tail(template_path, m
                 section="Секция 1",
                 lift_name="Л1",
                 quantity=1,
-                additional_options="预留视频监控接口\n手势呼梯",
+                additional_options="预留视频监控接口\nARD自动救援装置",
             ),
             LiftGroup(
                 section="Секция 2",
