@@ -339,7 +339,7 @@ SYNCABLE_GROUP_FIELDS.update(ADDITIONAL_OPTION_TRANSLATIONS)
 FIELD_GROUPS = {
     "Основные": [
         ("section", "№ дома / № секции", "text", None),
-        ("lift_name", "№ лифта / описание группы", "text", None),
+        ("lift_name", "№ лифта", "text", None),
         ("quantity", "Количество лифтов", "number", None),
         ("lift_type", "Тип лифта", "select", "lift_type"),
         ("capacity_kg", "Грузоподъемность, кг", "capacity_select", None),
@@ -1785,23 +1785,23 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     header_cols = st.columns([1.35, 2.35, 2.15, 4.15])
     with header_cols[0]:
         st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
-        if st.button("Добавить группу", use_container_width=True):
+        if st.button("Добавить лифт", use_container_width=True):
             _add_group()
             st.rerun()
     with header_cols[1]:
         st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
-        if st.button("Копировать выбранную группу", use_container_width=True):
+        if st.button("Копировать выбранный лифт", use_container_width=True):
             _copy_group(int(st.session_state.active_group_index))
             st.rerun()
     with header_cols[2]:
         st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
-        if st.button("Удалить выбранную группу", use_container_width=True):
+        if st.button("Удалить выбранный лифт", use_container_width=True):
             _delete_group(int(st.session_state.active_group_index))
             st.rerun()
     with header_cols[3]:
         st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
         if st.button(
-            "Перенести отделки и опции из выбранной группы",
+            "Перенести отделки и опции из выбранного лифта",
             disabled=st.session_state.group_count <= 1,
             use_container_width=True,
         ):
@@ -1809,8 +1809,8 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             source_label = _group_display_label(source_index)
             _sync_common_fields_from_selected_group(source_index)
             st.session_state.group_sync_notice = (
-                f"Отделки и опции перенесены из группы «{source_label}» "
-                f"в остальные группы ({st.session_state.group_count - 1})."
+                f"Отделки и опции перенесены из лифта «{source_label}» "
+                f"в остальные лифты ({st.session_state.group_count - 1})."
             )
             st.rerun()
 
@@ -2130,7 +2130,7 @@ def _group_navigation_items(groups: list[dict[str, Any]]) -> list[tuple[int, str
         capacity = group.get("capacity_kg")
         label = _format_group_display_label(group.get("lift_name"), group.get("quantity"), capacity)
         if not label:
-            label = _append_capacity_to_group_label(f"Группа {index + 1}", capacity)
+            label = _append_capacity_to_group_label(f"Лифт {index + 1}", capacity)
         items.append((index, label))
     return items
 
@@ -2169,7 +2169,7 @@ def _group_display_label(index: int) -> str:
     quantity = st.session_state.get(f"group_{index}_quantity", defaults.get("quantity"))
     capacity = st.session_state.get(f"group_{index}_capacity_kg", defaults.get("capacity_kg"))
     return _format_group_display_label(lift_name, quantity, capacity) or _append_capacity_to_group_label(
-        f"Группа {index + 1}", capacity
+        f"Лифт {index + 1}", capacity
     )
 
 
@@ -2206,6 +2206,8 @@ def _lift_name_for_quantity(lift_name: Any, quantity: Any) -> str:
     count = _parse_positive_int_silent(quantity)
     if not text or count is None:
         return text
+    if "." in text:
+        return text
     match = re.match(r"^(.*?)(\d+)([^0-9–—-]*)", text)
     if not match:
         return text
@@ -2224,6 +2226,8 @@ def _next_group_lift_name(lift_name: Any, quantity: Any) -> str | None:
     text = str(lift_name or "").strip()
     count = _parse_positive_int_silent(quantity)
     if not text or count is None:
+        return None
+    if "." in text:
         return None
     match = re.match(r"^(.*?)(\d+)([^0-9–—-]*)", text)
     if not match:

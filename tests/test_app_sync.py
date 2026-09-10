@@ -707,6 +707,19 @@ def test_lift_name_range_updates_when_quantity_changes() -> None:
     assert app._lift_name_for_quantity("Л-04А", 3) == "Л-04А-Л-06А"
 
 
+def test_dotted_lift_number_is_preserved_as_custom_identifier() -> None:
+    assert app._lift_name_for_quantity("Л11.1", 1) == "Л11.1"
+    assert app._lift_name_for_quantity("1.3", 2) == "1.3"
+    assert app._format_group_display_label("Л11.1", 1, 1000) == "Л11.1 (1000 кг)"
+    assert app._next_group_lift_name("Л11.1", 1) is None
+
+
+def test_lift_name_field_has_short_label() -> None:
+    labels = {field: label for field, label, _, _ in app.FIELD_GROUPS["Основные"]}
+
+    assert labels["lift_name"] == "№ лифта"
+
+
 def test_lift_name_field_is_normalized_to_range_before_render(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_count": 3,
@@ -1933,7 +1946,7 @@ def test_group_navigation_items_show_all_groups() -> None:
 
     assert app._group_navigation_items([filled_group, empty_group]) == [
         (0, "Л1-Л3 (1000 кг)"),
-        (1, "Группа 2"),
+        (1, "Лифт 2"),
     ]
 
 
