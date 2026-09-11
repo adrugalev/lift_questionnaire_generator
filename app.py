@@ -671,6 +671,7 @@ def _filled_field_styles_css() -> str:
             background: transparent !important;
             border: 0 !important;
             box-shadow: none !important;
+            cursor: default !important;
             font-size: 3.05rem !important;
             font-weight: 700 !important;
             height: 3.3rem !important;
@@ -711,7 +712,7 @@ def _filled_field_styles_css() -> str:
             border: 0 !important;
             box-shadow: none !important;
             color: #8b8f98 !important;
-            cursor: default;
+            cursor: pointer !important;
             height: 1.15rem !important;
             min-height: 0 !important;
             outline: none !important;
