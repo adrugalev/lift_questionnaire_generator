@@ -714,6 +714,7 @@ def _filled_field_styles_css() -> str:
             color: #8b8f98 !important;
             cursor: pointer !important;
             height: 1.15rem !important;
+            margin-left: 0.125rem !important;
             min-height: 0 !important;
             outline: none !important;
             padding: 0 !important;
