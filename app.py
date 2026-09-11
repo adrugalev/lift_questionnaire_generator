@@ -68,6 +68,7 @@ IMAGE_OPTION_DIRS = {
     "mirror": LOCAL_TEMPLATES / "Mirrors_photo",
     "cop_type": LOCAL_TEMPLATES / "COPHOP_photo",
     "lop_type": LOCAL_TEMPLATES / "LOP_photo",
+    "floor_indicator_type": LOCAL_TEMPLATES / "IND_photo",
 }
 FALLBACK_IMAGE_OPTION_DIRS = {
     "finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
@@ -79,6 +80,7 @@ FALLBACK_IMAGE_OPTION_DIRS = {
     "mirror": PREVIOUS_CP_TEMPLATES / "Mirrors_photo",
     "cop_type": PREVIOUS_CP_TEMPLATES / "COPHOP_photo",
     "lop_type": PREVIOUS_CP_TEMPLATES / "LOP_photo",
+    "floor_indicator_type": PREVIOUS_CP_TEMPLATES / "IND_photo",
 }
 IMAGE_OPTION_PREFIX_FILTERS = {
     "signal_steel_finish": ("EX-HS", "EX-MS"),
@@ -179,6 +181,7 @@ SELECT_WITHOUT_CUSTOM_OPTION_KEYS = {
     "ceiling_type",
     "cop_type",
     "display_type",
+    "floor_indicator_type",
     "door_model",
     "door_opening_type",
     "floor_finish",
@@ -196,6 +199,7 @@ SELECT_WITHOUT_CUSTOM_OPTION_KEYS = {
 STRICT_SELECT_OPTION_KEYS = {
     "cop_type",
     "door_model",
+    "floor_indicator_type",
     "lop_type",
     "seismic",
 }
@@ -305,11 +309,13 @@ SIGNAL_FINISH_FIELDS = {
     "cop_type": "cop_finish",
     "main_floor_lop_type": "main_floor_lop_finish",
     "other_floors_lop_type": "other_floors_lop_finish",
+    "floor_indicator_type": "floor_indicator_finish",
 }
 SIGNAL_PREVIEW_FIELD_PAIRS = (
     ("cop_type", "cop_finish"),
     ("main_floor_lop_type", "main_floor_lop_finish"),
     ("other_floors_lop_type", "other_floors_lop_finish"),
+    ("floor_indicator_type", "floor_indicator_finish"),
 )
 CABIN_COMPONENT_FINISH_FIELDS = {
     "handrail_type": "handrail_finish",
@@ -341,6 +347,8 @@ SYNCABLE_GROUP_FIELDS = {
     "main_floor_lop_finish",
     "other_floors_lop_type",
     "other_floors_lop_finish",
+    "floor_indicator_type",
+    "floor_indicator_finish",
     "machine_room",
     "shaft_material",
     "room_under_pit",
@@ -399,6 +407,8 @@ FIELD_GROUPS = {
         ("main_floor_lop_finish", "Материал поста вызова на основном этаже", "select", "signal_steel_finish"),
         ("other_floors_lop_type", "Посты вызова на остальных этажах", "select", "lop_type"),
         ("other_floors_lop_finish", "Материал постов вызова на остальных этажах", "select", "signal_steel_finish"),
+        ("floor_indicator_type", "Индикация этажная", "select", "floor_indicator_type"),
+        ("floor_indicator_finish", "Материал индикации этажной", "select", "signal_steel_finish"),
         ("display_type", "Тип дисплея", "select", "display_type"),
     ],
     "Шахта": [
@@ -434,6 +444,7 @@ WALL_LINKED_FINISH_FIELDS = (
     "cop_finish",
     "main_floor_lop_finish",
     "other_floors_lop_finish",
+    "floor_indicator_finish",
 )
 MGN_ACCESSIBILITY_FIELD = "mgn_accessibility"
 MGN_VOICE_OPTION_FIELD = "option_russian_voice"
@@ -572,6 +583,8 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "main_floor_lop_finish": signal_finish,
             "other_floors_lop_type": _random_select_value(options, "lop_type") or "EX-JC99A",
             "other_floors_lop_finish": signal_finish,
+            "floor_indicator_type": _random_select_value(options, "floor_indicator_type") or "EX-HD09",
+            "floor_indicator_finish": signal_finish,
             "display_type": random.choice(["DOT-Matrix LED", "LCD (7-сегментный)", 'LCD 10,4"', 'LCD 15"']),
             "machine_room": DEFAULT_MACHINE_ROOM,
             "shaft_material": DEFAULT_SHAFT_MATERIAL,

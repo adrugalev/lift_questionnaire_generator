@@ -140,15 +140,15 @@ def test_machine_room_height_row_is_inserted_only_when_filled(template_path, map
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
 
-    assert ws["A43"].value == "Машинное помещение"
-    assert ws["A44"].value == "Высота машинного помещения, мм"
-    assert ws["B44"].value == "机房高度，毫米"
-    assert ws["C44"].value == 2600
-    assert ws["D44"].value is None
-    assert ws["A45"].value == "Материал шахты"
-    assert ws["C45"].value == "Железобетон"
-    assert ws["D45"].value == "Кирпичная"
-    assert ws["A44"]._style == ws["A45"]._style
+    assert ws["A44"].value == "Машинное помещение"
+    assert ws["A45"].value == "Высота машинного помещения, мм"
+    assert ws["B45"].value == "机房高度，毫米"
+    assert ws["C45"].value == 2600
+    assert ws["D45"].value is None
+    assert ws["A46"].value == "Материал шахты"
+    assert ws["C46"].value == "Железобетон"
+    assert ws["D46"].value == "Кирпичная"
+    assert ws["A45"]._style == ws["A46"]._style
 
 
 def test_machine_room_height_row_is_omitted_when_not_filled(template_path, mapping_path):
@@ -168,7 +168,7 @@ def test_machine_room_height_row_is_omitted_when_not_filled(template_path, mappi
 
     labels = [ws.cell(row=row, column=1).value for row in range(1, ws.max_row + 1)]
     assert "Высота машинного помещения, мм" not in labels
-    assert ws["A44"].value == "Материал шахты"
+    assert ws["A45"].value == "Материал шахты"
 
 
 def test_machine_room_height_is_ignored_without_machine_room(template_path, mapping_path):
@@ -221,6 +221,39 @@ def test_door_model_defaults_to_nbsl_in_questionnaire(template_path, mapping_pat
     ws = load_workbook(BytesIO(content)).active
 
     assert ws["C27"].value == "NBSL"
+
+
+def test_floor_indicator_is_written_below_display_type(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        project=ProjectInfo(project_name="Тестовый проект"),
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                floor_indicator_type="EX-HD09",
+                floor_indicator_finish="Шлифованная нержавеющая сталь EX-HS01",
+            )
+        ],
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+    indicator_row = next(
+        row
+        for row in range(1, ws.max_row + 1)
+        if ws.cell(row=row, column=1).value == "Индикация этажная"
+    )
+
+    assert ws.cell(row=indicator_row - 1, column=1).value == "Тип дисплея"
+    assert ws.cell(row=indicator_row, column=2).value == "楼层指示器"
+    assert ws.cell(row=indicator_row, column=3).value == (
+        "EX-HD09, Шлифованная нержавеющая сталь EX-HS01"
+    )
+    assert ws.cell(row=indicator_row + 1, column=1).value == (
+        "Посты вызова на основном посадочном этаже"
+    )
+    assert ws.cell(row=indicator_row, column=1)._style == ws.cell(row=indicator_row + 1, column=1)._style
+    assert ws.cell(row=indicator_row, column=3)._style == ws.cell(row=indicator_row + 1, column=3)._style
 
 
 def test_questionnaire_reference_header_styles_are_applied(template_path, mapping_path):
@@ -313,6 +346,8 @@ def test_visual_summary_uses_full_control_panel_and_call_post_material_labels() 
         equipment_labels_by_field["other_floors_lop_type"]
         == "Посты вызовов на остальных этажах"
     )
+    assert labels_by_field["floor_indicator_finish"] == "Материал индикации этажной"
+    assert equipment_labels_by_field["floor_indicator_type"] == "Индикация этажная"
 
 
 def test_project_name_goes_to_header_and_sheet_title(template_path, mapping_path):
@@ -404,9 +439,9 @@ def test_russian_and_chinese_columns_are_not_changed(template_path, mapping_path
     after = load_workbook(BytesIO(content)).active
     labels_after = [
         (after.cell(row=row, column=1).value, after.cell(row=row, column=2).value)
-        for row in range(2, 55)
+        for row in range(2, 56)
         if str(after.cell(row=row, column=1).value or "").strip()
-        not in factory_labels | {"Модель дверей"}
+        not in factory_labels | {"Модель дверей", "Индикация этажная"}
     ]
     assert labels_after == labels_before
 
@@ -547,14 +582,14 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
 
-    assert ws["A51"].value == "Дополнительные опции"
-    assert ws["A52"].value == "Подготовка под видеонаблюдение"
-    assert ws["B52"].value == "预留视频监控接口"
-    assert ws["C52"].value == "ДА"
-    assert ws["A53"].value == "ARD — Automatic Rescue Device"
-    assert ws["B53"].value == "ARD自动救援装置"
+    assert ws["A52"].value == "Дополнительные опции"
+    assert ws["A53"].value == "Подготовка под видеонаблюдение"
+    assert ws["B53"].value == "预留视频监控接口"
     assert ws["C53"].value == "ДА"
-    assert ws["A54"].value == "Доступность МГН"
+    assert ws["A54"].value == "ARD — Automatic Rescue Device"
+    assert ws["B54"].value == "ARD自动救援装置"
+    assert ws["C54"].value == "ДА"
+    assert ws["A55"].value == "Доступность МГН"
 
 
 def test_factory_rows_use_reference_format_and_clear_blank_tail(template_path, mapping_path):

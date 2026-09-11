@@ -388,6 +388,27 @@ def test_cop_image_options_exclude_hx99_and_ic_card(tmp_path, monkeypatch) -> No
     assert options == {"EX-AC99A": included_path}
 
 
+def test_floor_indicator_images_are_separated_from_lop_images(project_root) -> None:
+    indicator_names = {
+        path.name
+        for path in (project_root / "templates" / "IND_photo").iterdir()
+        if path.is_file()
+    }
+    lop_names = {
+        path.name
+        for path in (project_root / "templates" / "LOP_photo").iterdir()
+        if path.is_file()
+    }
+
+    assert indicator_names == {"EX-HD09.png", "EX-HX99.png", "EX-HX201.png"}
+    assert indicator_names.isdisjoint(lop_names)
+    assert list(app._image_options_for_key("floor_indicator_type")) == [
+        "EX-HD09",
+        "EX-HX99",
+        "EX-HX201",
+    ]
+
+
 def test_signal_steel_finish_options_include_only_hs_and_ms(tmp_path, monkeypatch) -> None:
     hs_path = tmp_path / "EX-HS01.png"
     ms_path = tmp_path / "EX-MS01.png"
@@ -1765,12 +1786,16 @@ def test_signal_finish_fields_are_added_to_export_values() -> None:
         "cop_finish": "Шлифованная нержавеющая сталь EX-HS01",
         "main_floor_lop_type": "EX-JC99A",
         "main_floor_lop_finish": "Зеркальная нержавеющая сталь EX-MS01",
+        "floor_indicator_type": "EX-HD09",
+        "floor_indicator_finish": "Шлифованная нержавеющая сталь EX-HS01",
     })
 
     assert group["cop_type"] == "EX-AC99A, Шлифованная нержавеющая сталь EX-HS01"
     assert group["main_floor_lop_type"] == "EX-JC99A, Зеркальная нержавеющая сталь EX-MS01"
+    assert group["floor_indicator_type"] == "EX-HD09, Шлифованная нержавеющая сталь EX-HS01"
     assert group["cop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert group["main_floor_lop_finish"] == "Зеркальная нержавеющая сталь EX-MS01"
+    assert group["floor_indicator_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
 
 
 def test_cabin_component_finish_fields_are_added_to_export_values() -> None:
@@ -1865,6 +1890,8 @@ def test_signalization_fields_are_arranged_as_device_finish_pairs() -> None:
         "main_floor_lop_finish",
         "other_floors_lop_type",
         "other_floors_lop_finish",
+        "floor_indicator_type",
+        "floor_indicator_finish",
         "display_type",
     ]
 

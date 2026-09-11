@@ -18,6 +18,7 @@
   "yes_no": ["ДА", "НЕТ"],
   "cop_type": [],
   "display_type": ["DOT-Matrix LED", "LCD (7-сегментный)", "LCD 10,4\"", "LCD 15\""],
+  "floor_indicator_type": [],
   "lop_type": [],
   "machine_room": ["Без машинного помещения", "С машинным помещением"],
   "shaft_material": ["Железобетон", "Кирпичная", "Металлокаркас"],

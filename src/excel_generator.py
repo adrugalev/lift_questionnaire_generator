@@ -47,6 +47,7 @@ EXCEL_IMAGE_OPTION_DIRS = {
     "mirror": LOCAL_TEMPLATES / "Mirrors_photo",
     "cop_type": LOCAL_TEMPLATES / "COPHOP_photo",
     "lop_type": LOCAL_TEMPLATES / "LOP_photo",
+    "floor_indicator_type": LOCAL_TEMPLATES / "IND_photo",
 }
 FALLBACK_EXCEL_IMAGE_OPTION_DIRS = {
     "finish": PREVIOUS_CP_TEMPLATES / "Walls_photo",
@@ -58,6 +59,7 @@ FALLBACK_EXCEL_IMAGE_OPTION_DIRS = {
     "mirror": PREVIOUS_CP_TEMPLATES / "Mirrors_photo",
     "cop_type": PREVIOUS_CP_TEMPLATES / "COPHOP_photo",
     "lop_type": PREVIOUS_CP_TEMPLATES / "LOP_photo",
+    "floor_indicator_type": PREVIOUS_CP_TEMPLATES / "IND_photo",
 }
 EXCEL_IMAGE_OPTION_PREFIX_FILTERS = {
     "signal_steel_finish": ("EX-HS", "EX-MS"),
@@ -84,6 +86,7 @@ EXCEL_MATERIAL_SUMMARY_FIELDS = [
         "Материал вызывных постов на остальных этажах",
         "signal_steel_finish",
     ),
+    ("floor_indicator_finish", "Материал индикации этажной", "signal_steel_finish"),
 ]
 EXCEL_EQUIPMENT_SUMMARY_FIELDS = [
     ("handrail_type", "Поручень", "handrail_type"),
@@ -92,6 +95,7 @@ EXCEL_EQUIPMENT_SUMMARY_FIELDS = [
     ("cop_type", "Панель управления", "cop_type"),
     ("main_floor_lop_type", "Пост вызова на основном посадочном этаже", "lop_type"),
     ("other_floors_lop_type", "Посты вызовов на остальных этажах", "lop_type"),
+    ("floor_indicator_type", "Индикация этажная", "floor_indicator_type"),
 ]
 UNSELECTED_EXCEL_VALUES = {"", "Другое", "Другое...", "Choose an option"}
 PAIRED_EXCEL_FINISH_FIELDS = {
@@ -100,6 +104,7 @@ PAIRED_EXCEL_FINISH_FIELDS = {
     "cop_type": "cop_finish",
     "main_floor_lop_type": "main_floor_lop_finish",
     "other_floors_lop_type": "other_floors_lop_finish",
+    "floor_indicator_type": "floor_indicator_finish",
 }
 EXCEL_FINISH_VALUE_FIELDS = {
     "side_wall_finish",
@@ -115,6 +120,7 @@ EXCEL_FINISH_VALUE_FIELDS = {
     "cop_finish",
     "main_floor_lop_finish",
     "other_floors_lop_finish",
+    "floor_indicator_finish",
 }
 EXCEL_ALLOWED_TEXT_FINISH_VALUES = {
     "нет",
@@ -166,6 +172,9 @@ QUESTIONNAIRE_FACTORY_ROW_ORDER = {
 }
 QUESTIONNAIRE_DOOR_MODEL_LABEL = "Модель дверей"
 QUESTIONNAIRE_DOOR_MODEL_LABEL_ZH = "门机型号"
+QUESTIONNAIRE_FLOOR_INDICATOR_FIELD = "floor_indicator_type"
+QUESTIONNAIRE_FLOOR_INDICATOR_LABEL = "Индикация этажная"
+QUESTIONNAIRE_FLOOR_INDICATOR_LABEL_ZH = "楼层指示器"
 QUESTIONNAIRE_MACHINE_ROOM_WITH_VALUE = "С машинным помещением"
 QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD = "machine_room_height_mm"
 QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL = "Высота машинного помещения, мм"
@@ -210,6 +219,7 @@ def generate_questionnaire_xlsx(
         raise ExcelGenerationError("Нужна хотя бы одна группа лифтов.")
 
     _ensure_door_model_row(worksheet, group_rows)
+    _ensure_floor_indicator_row(worksheet, group_rows)
     if _questionnaire_has_machine_room_height(questionnaire):
         _insert_machine_room_height_row(worksheet, group_rows)
     _prepare_group_columns(worksheet, first_group_col, group_count)
@@ -1184,6 +1194,33 @@ def _insert_machine_room_height_row(worksheet: Worksheet, group_rows: dict[str, 
     worksheet.cell(row=insert_at, column=2).value = QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL_ZH
     _shift_group_rows_after(group_rows, machine_room_row, 1)
     group_rows[QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD] = insert_at
+
+
+def _ensure_floor_indicator_row(worksheet: Worksheet, group_rows: dict[str, int]) -> None:
+    if "display_type" not in group_rows:
+        return
+
+    display_row = int(group_rows["display_type"])
+    row = display_row + 1
+    current_label = str(worksheet.cell(row=row, column=1).value or "").strip()
+    if current_label != QUESTIONNAIRE_FLOOR_INDICATOR_LABEL:
+        existing_rows = [
+            current_row
+            for current_row in range(1, worksheet.max_row + 1)
+            if str(worksheet.cell(row=current_row, column=1).value or "").strip()
+            == QUESTIONNAIRE_FLOOR_INDICATOR_LABEL
+        ]
+        if existing_rows:
+            raise ExcelGenerationError(
+                "Строка «Индикация этажная» находится не рядом со строкой «Тип дисплея»."
+            )
+        worksheet.insert_rows(row)
+        _copy_row_style(worksheet, row + 1, row)
+        worksheet.cell(row=row, column=1).value = QUESTIONNAIRE_FLOOR_INDICATOR_LABEL
+        worksheet.cell(row=row, column=2).value = QUESTIONNAIRE_FLOOR_INDICATOR_LABEL_ZH
+
+    _shift_group_rows_after(group_rows, display_row, 1)
+    group_rows[QUESTIONNAIRE_FLOOR_INDICATOR_FIELD] = row
 
 
 def _ensure_door_model_row(worksheet: Worksheet, group_rows: dict[str, int]) -> None:

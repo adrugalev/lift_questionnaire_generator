@@ -74,6 +74,8 @@ class LiftGroup(BaseModel):
     main_floor_lop_finish: Optional[str] = None
     other_floors_lop_type: Optional[str] = None
     other_floors_lop_finish: Optional[str] = None
+    floor_indicator_type: Optional[str] = None
+    floor_indicator_finish: Optional[str] = None
     machine_room: Optional[str] = None
     machine_room_height_mm: Optional[DimensionValue] = None
     shaft_material: Optional[str] = None
