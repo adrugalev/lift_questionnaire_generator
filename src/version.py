@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 APP_VERSION_DATE = "11.09.2026"
 # Дневной счетчик версии: при смене APP_VERSION_DATE начинается с 1.
-APP_VERSION_REVISION = 13
+APP_VERSION_REVISION = 14
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,13 @@ class VersionHistoryEntry:
 
 
 APP_VERSION_HISTORY = (
+    VersionHistoryEntry(
+        revision=14,
+        date="11.09.2026",
+        changes=(
+            "Материал поручня исключается из опросника, если поручень не выбран.",
+        ),
+    ),
     VersionHistoryEntry(
         revision=13,
         date="11.09.2026",

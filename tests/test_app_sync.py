@@ -1825,9 +1825,13 @@ def test_unselected_materials_are_not_exported_as_partial_values() -> None:
     assert "handrail_type" not in group
     assert "ceiling_type" not in group
 
-    group_without_handrail = app._prepare_group_for_model({"handrail_type": "Без поручня"})
+    group_without_handrail = app._prepare_group_for_model({
+        "handrail_type": "Без поручня, Шлифованная нержавеющая сталь EX-HS01",
+        "handrail_finish": "Шлифованная нержавеющая сталь EX-HS01",
+    })
 
     assert group_without_handrail["handrail_type"] == "Без поручня"
+    assert "handrail_finish" not in group_without_handrail
 
 
 def test_machine_room_height_is_removed_without_machine_room() -> None:

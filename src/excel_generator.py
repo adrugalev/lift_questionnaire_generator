@@ -107,6 +107,9 @@ PAIRED_EXCEL_FINISH_FIELDS = {
     "other_floors_lop_type": "other_floors_lop_finish",
     "floor_indicator_type": "floor_indicator_finish",
 }
+PAIRED_EXCEL_SOURCE_FIELDS = {
+    finish_field: source_field for source_field, finish_field in PAIRED_EXCEL_FINISH_FIELDS.items()
+}
 EXCEL_FINISH_VALUE_FIELDS = {
     "side_wall_finish",
     "rear_wall_finish",
@@ -511,6 +514,9 @@ def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
         return None
     if field_name == QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD and not _group_has_machine_room(group):
         return None
+    paired_source_field = PAIRED_EXCEL_SOURCE_FIELDS.get(field_name)
+    if paired_source_field and _is_no_finish_required_excel_value(getattr(group, paired_source_field, None)):
+        return None
     if field_name in EXCEL_FINISH_VALUE_FIELDS and not _is_selected_excel_finish_value(value):
         return None
 
@@ -525,7 +531,7 @@ def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
         return value
 
     if _is_no_finish_required_excel_value(value):
-        return value
+        return str(value).split(",", 1)[0].strip()
 
     finish_value = getattr(group, finish_field, None)
     if _is_unselected_excel_value(finish_value) or not _is_selected_excel_finish_value(finish_value):
@@ -1159,6 +1165,9 @@ def _visual_lift_name(lift_name: Any, quantity: Any) -> str:
 def _visual_summary_items(group: Any, fields: list[tuple[str, str, str]]) -> list[tuple[str, str, Path]]:
     items: list[tuple[str, str, Path]] = []
     for field_name, label, option_key in fields:
+        paired_source_field = PAIRED_EXCEL_SOURCE_FIELDS.get(field_name)
+        if paired_source_field and _is_no_finish_required_excel_value(getattr(group, paired_source_field, None)):
+            continue
         value = getattr(group, field_name, None)
         image_path = _excel_image_path_for_value(option_key, value)
         if value and image_path:

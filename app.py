@@ -3697,9 +3697,12 @@ def _apply_paired_finish_fields(group: dict[str, Any], paired_fields: dict[str, 
         finish_value = group.get(finish_field)
         if device_value in ("", None):
             continue
+        if _is_no_finish_required_value(device_value):
+            group[device_field] = str(device_value).split(",", 1)[0].strip()
+            group.pop(finish_field, None)
+            continue
         if finish_value in ("", None):
-            if not _is_no_finish_required_value(device_value):
-                group.pop(device_field, None)
+            group.pop(device_field, None)
             continue
         if finish_value == OTHER_OPTION:
             group.pop(device_field, None)

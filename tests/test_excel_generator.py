@@ -521,6 +521,27 @@ def test_unselected_finishes_and_materials_are_blank_in_questionnaire(template_p
     assert ws["C38"].value is None
 
 
+def test_handrail_material_is_omitted_when_handrail_is_not_selected(template_path, mapping_path):
+    material = "Шлифованная нержавеющая сталь EX-HS01"
+    group = LiftGroup(
+        lift_name="Л1",
+        quantity=1,
+        handrail_type=f"Без поручня, {material}",
+        handrail_finish=material,
+    )
+    questionnaire = Questionnaire(lift_groups=[group])
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    workbook = load_workbook(BytesIO(content))
+
+    assert workbook.active["C22"].value == "Без поручня"
+    material_items = excel_generator._visual_summary_items(
+        group,
+        excel_generator.EXCEL_MATERIAL_SUMMARY_FIELDS,
+    )
+    assert not any(label == "Материал поручня" for label, _, _ in material_items)
+
+
 def test_selected_finish_articles_are_written_to_questionnaire(template_path, mapping_path):
     questionnaire = Questionnaire(
         project=ProjectInfo(project_name="Тестовый проект"),
