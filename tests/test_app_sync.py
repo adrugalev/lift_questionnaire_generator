@@ -1945,14 +1945,20 @@ def test_capacity_select_accepts_custom_value(monkeypatch) -> None:
     assert "1000" in captured["values"]
 
 
-def test_additional_options_textarea_is_removed_from_additional_section() -> None:
+def test_additional_options_section_has_optional_other_textarea() -> None:
     additional_fields = [field for field, _, _, _ in app.FIELD_GROUPS["Дополнительные опции"]]
     additional_field_kinds = {field: kind for field, _, kind, _ in app.FIELD_GROUPS["Дополнительные опции"]}
 
     assert "additional_options" not in additional_fields
-    assert additional_fields == ["mgn_accessibility", *app.ADDITIONAL_OPTION_TRANSLATIONS.keys()]
+    assert additional_fields == [
+        "mgn_accessibility",
+        *app.ADDITIONAL_OPTION_TRANSLATIONS.keys(),
+        app.ADDITIONAL_OPTIONS_OTHER_FIELD,
+    ]
     assert additional_field_kinds["mgn_accessibility"] == "checkbox_yes_no"
     assert all(additional_field_kinds[field] == "checkbox_yes_no" for field in app.ADDITIONAL_OPTION_TRANSLATIONS)
+    assert additional_field_kinds[app.ADDITIONAL_OPTIONS_OTHER_FIELD] == "textarea"
+    assert app.ADDITIONAL_OPTIONS_OTHER_FIELD in app.SYNCABLE_GROUP_FIELDS
 
 
 def test_additional_option_fields_have_chinese_translations() -> None:
@@ -1968,9 +1974,11 @@ def test_selected_additional_options_are_exported_in_chinese() -> None:
         "option_cctv_preparation": "ДА",
         "option_ado": "НЕТ",
         "option_bypass": "ДА",
+        "additional_options_other": "Датчик открытия служебной двери",
     })
 
     assert group["additional_options"] == "预留视频监控接口\nBypass（轿厢载荷超过80%时屏蔽外呼）"
+    assert group["additional_options_other"] == "Датчик открытия служебной двери"
     assert "option_cctv_preparation" not in group
     assert "option_ado" not in group
     assert "option_bypass" not in group
@@ -2039,6 +2047,7 @@ def test_additional_options_section_label_shows_selected_count_instead_of_checkm
         "mgn_accessibility": "ДА",
         "option_ard": True,
         "option_bypass": "НЕТ",
+        "additional_options_other": "Особое исполнение",
     }
 
     assert app._selected_additional_options_count(group) == 2
@@ -2048,6 +2057,12 @@ def test_additional_options_section_label_shows_selected_count_instead_of_checkm
     assert app._section_display_label("Дополнительные опции", {"Дополнительные опции"}, {}) == (
         "Дополнительные опции (0)"
     )
+
+
+def test_additional_options_other_field_is_optional_for_section_completion() -> None:
+    group = {"mgn_accessibility": "НЕТ"}
+
+    assert app._section_is_complete("Дополнительные опции", group)
 
 
 def test_group_section_name_normalizes_dynamic_and_legacy_labels() -> None:

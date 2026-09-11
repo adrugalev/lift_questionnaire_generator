@@ -179,6 +179,9 @@ QUESTIONNAIRE_MACHINE_ROOM_WITH_VALUE = "С машинным помещение�
 QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD = "machine_room_height_mm"
 QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL = "Высота машинного помещения, мм"
 QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL_ZH = "机房高度，毫米"
+QUESTIONNAIRE_ADDITIONAL_OTHER_FIELD = "additional_options_other"
+QUESTIONNAIRE_ADDITIONAL_OTHER_LABEL = "Прочее"
+QUESTIONNAIRE_ADDITIONAL_OTHER_LABEL_ZH = "其他"
 QUESTIONNAIRE_SECTION_TITLES = {
     "Кабина",
     "Двери кабины",
@@ -224,17 +227,29 @@ def generate_questionnaire_xlsx(
         _insert_machine_room_height_row(worksheet, group_rows)
     _prepare_group_columns(worksheet, first_group_col, group_count)
     additional_options_by_group, additional_options = _additional_options_by_group(questionnaire)
-    if additional_options and "additional_options" in group_rows:
+    additional_other_values = [
+        _selected_text_value(getattr(group, QUESTIONNAIRE_ADDITIONAL_OTHER_FIELD, None))
+        for group in questionnaire.lift_groups
+    ]
+    has_additional_other = any(additional_other_values)
+    if (additional_options or has_additional_other) and "additional_options" in group_rows:
         group_rows = dict(group_rows)
         additional_options_row = int(group_rows["additional_options"])
+        mgn_accessibility_row = int(group_rows["mgn_accessibility"])
         _insert_additional_option_rows(
             worksheet,
             additional_options_row,
+            mgn_accessibility_row,
             additional_options,
             additional_options_by_group,
             first_group_col,
+            additional_other_values,
         )
-        _shift_group_rows_after(group_rows, additional_options_row, len(additional_options))
+        standard_options_count = len(additional_options)
+        _shift_group_rows_after(group_rows, additional_options_row, standard_options_count)
+        if has_additional_other:
+            shifted_mgn_row = mgn_accessibility_row + standard_options_count
+            _shift_group_rows_after(group_rows, shifted_mgn_row, 1)
     _ensure_factory_rows_order(worksheet)
     _clear_group_values(worksheet, first_group_col, group_count, group_rows, project_rows)
 
@@ -1301,21 +1316,43 @@ def _parse_additional_options(value: str | None) -> set[AdditionalOption]:
 def _insert_additional_option_rows(
     worksheet: Worksheet,
     section_row: int,
+    mgn_accessibility_row: int,
     additional_options: list[AdditionalOption],
     selected_by_group: list[set[AdditionalOption]],
     first_group_col: int,
+    additional_other_values: list[str | None],
 ) -> None:
     insert_at = section_row + 1
-    worksheet.insert_rows(insert_at, amount=len(additional_options))
-    source_row = insert_at + len(additional_options)
+    has_additional_other = any(additional_other_values)
+    standard_options_count = len(additional_options)
+    if standard_options_count:
+        worksheet.insert_rows(insert_at, amount=standard_options_count)
+    shifted_mgn_row = mgn_accessibility_row + standard_options_count
     for offset, option in enumerate(additional_options):
         row = insert_at + offset
-        _copy_row_style(worksheet, source_row, row)
+        _copy_row_style(worksheet, shifted_mgn_row, row)
         worksheet.cell(row=row, column=1).value = option.russian
         worksheet.cell(row=row, column=2).value = option.chinese
         for group_index, group_options in enumerate(selected_by_group):
             if option in group_options:
                 worksheet.cell(row=row, column=first_group_col + group_index).value = "ДА"
+
+    if has_additional_other:
+        row = shifted_mgn_row + 1
+        worksheet.insert_rows(row, amount=1)
+        _copy_row_style(worksheet, shifted_mgn_row, row)
+        worksheet.cell(row=row, column=1).value = QUESTIONNAIRE_ADDITIONAL_OTHER_LABEL
+        worksheet.cell(row=row, column=2).value = QUESTIONNAIRE_ADDITIONAL_OTHER_LABEL_ZH
+        for group_index, value in enumerate(additional_other_values):
+            if value:
+                worksheet.cell(row=row, column=first_group_col + group_index).value = value
+
+
+def _selected_text_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _ensure_factory_rows_order(worksheet: Worksheet) -> None:

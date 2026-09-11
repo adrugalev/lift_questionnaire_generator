@@ -299,6 +299,7 @@ DEFAULT_MAIN_LANDING_FLOOR = "1"
 DEFAULT_MACHINE_ROOM = "Без машинного помещения"
 MACHINE_ROOM_WITH_VALUE = "С машинным помещением"
 MACHINE_ROOM_HEIGHT_FIELD = "machine_room_height_mm"
+ADDITIONAL_OPTIONS_OTHER_FIELD = "additional_options_other"
 DEFAULT_SHAFT_MATERIAL = "Железобетон"
 DEFAULT_SEISMIC = "НЕТ"
 DEFAULT_FIRE_RESISTANCE = "EI-60"
@@ -354,6 +355,7 @@ SYNCABLE_GROUP_FIELDS = {
     "room_under_pit",
     "seismic",
     "mgn_accessibility",
+    ADDITIONAL_OPTIONS_OTHER_FIELD,
 }
 SYNCABLE_GROUP_FIELDS.update(ADDITIONAL_OPTION_TRANSLATIONS)
 
@@ -425,6 +427,7 @@ FIELD_GROUPS = {
     "Дополнительные опции": [
         ("mgn_accessibility", "Доступность МГН", "checkbox_yes_no", None),
         *[(field, label, "checkbox_yes_no", None) for field, label in ADDITIONAL_OPTION_FIELDS],
+        (ADDITIONAL_OPTIONS_OTHER_FIELD, "Прочее", "textarea", None),
     ],
 }
 
@@ -621,6 +624,7 @@ def _apply_random_additional_options(group: dict[str, Any]) -> None:
         group[field] = random.random() < 0.22
     group["option_ard"] = True
     group["option_russian_voice"] = True
+    group[ADDITIONAL_OPTIONS_OTHER_FIELD] = "Особое исполнение по заданию заказчика"
 
 
 def main() -> None:
@@ -1979,6 +1983,12 @@ def _render_active_group_form(options: OptionsManager) -> None:
             _render_group_field_grid(upper_fields, 2, group, defaults, options, index)
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
             _render_group_field_grid(finish_fields, 2, group, defaults, options, index)
+        elif section == "Дополнительные опции":
+            checkbox_fields = [item for item in fields if item[0] != ADDITIONAL_OPTIONS_OTHER_FIELD]
+            other_fields = [item for item in fields if item[0] == ADDITIONAL_OPTIONS_OTHER_FIELD]
+            _render_group_field_grid(checkbox_fields, 3, group, defaults, options, index)
+            st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
+            _render_group_field_grid(other_fields, 1, group, defaults, options, index)
         else:
             has_visual_options = any(option_key in IMAGE_OPTION_DIRS for _, _, _, option_key in fields)
             column_count = 2 if has_visual_options else 3 if len(fields) >= 8 else 2
@@ -2447,7 +2457,7 @@ def _section_is_complete(section: str, group: dict[str, Any]) -> bool:
 
 
 def _field_is_complete(field: str, group: dict[str, Any]) -> bool:
-    if field == MACHINE_ROOM_HEIGHT_FIELD or field in ADDITIONAL_OPTION_TRANSLATIONS:
+    if field in {MACHINE_ROOM_HEIGHT_FIELD, ADDITIONAL_OPTIONS_OTHER_FIELD} or field in ADDITIONAL_OPTION_TRANSLATIONS:
         return True
     paired_source = _paired_finish_source_field(field)
     if paired_source:
@@ -2486,8 +2496,11 @@ def _section_display_label(
 
 
 def _selected_additional_options_count(group: dict[str, Any]) -> int:
-    fields = (field for field, _, _, _ in FIELD_GROUPS["Дополнительные опции"])
-    return sum(1 for field in fields if _truthy_yes_no(group.get(field)))
+    return sum(
+        1
+        for field in (MGN_ACCESSIBILITY_FIELD, *ADDITIONAL_OPTION_TRANSLATIONS)
+        if _truthy_yes_no(group.get(field))
+    )
 
 
 def _normalize_group_section_name(value: Any) -> str | None:

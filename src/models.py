@@ -86,6 +86,7 @@ class LiftGroup(BaseModel):
     room_under_pit: Optional[str] = None
     seismic: Optional[str] = None
     additional_options: Optional[str] = None
+    additional_options_other: Optional[str] = None
     mgn_accessibility: Optional[str] = None
     price: Optional[str] = None
     containers_count: Optional[int] = Field(default=None, gt=0)

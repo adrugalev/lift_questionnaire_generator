@@ -592,6 +592,54 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
     assert ws["A55"].value == "Доступность МГН"
 
 
+def test_additional_options_other_is_written_only_when_filled(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        project=ProjectInfo(project_name="Тестовый проект"),
+        lift_groups=[
+            LiftGroup(
+                section="Секция 1",
+                lift_name="Л1",
+                quantity=1,
+                additional_options="ARD自动救援装置",
+                additional_options_other="Особое исполнение кнопок\nпо заданию заказчика",
+            ),
+            LiftGroup(
+                section="Секция 2",
+                lift_name="Л2",
+                quantity=1,
+            ),
+        ],
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["A52"].value == "Дополнительные опции"
+    assert ws["A53"].value == "ARD — Automatic Rescue Device"
+    assert ws["A54"].value == "Доступность МГН"
+    assert ws["A55"].value == "Прочее"
+    assert ws["B55"].value == "其他"
+    assert ws["C55"].value == "Особое исполнение кнопок\nпо заданию заказчика"
+    assert ws["D55"].value is None
+    assert ws["A55"]._style == ws["A54"]._style
+
+    empty_content = generate_questionnaire_xlsx(
+        template_path,
+        Questionnaire(lift_groups=[LiftGroup(lift_name="Л1", quantity=1)]),
+        mapping_path,
+    )
+    empty_ws = load_workbook(BytesIO(empty_content)).active
+    labels = [empty_ws.cell(row=row, column=1).value for row in range(1, empty_ws.max_row + 1)]
+
+    assert "Прочее" not in labels
+
+
+def test_additional_options_other_accepts_arbitrary_text():
+    assert excel_generator._selected_text_value("Другое...") == "Другое..."
+    assert excel_generator._selected_text_value("  РАСЧЁТНОЕ  ") == "РАСЧЁТНОЕ"
+    assert excel_generator._selected_text_value("   ") is None
+
+
 def test_factory_rows_use_reference_format_and_clear_blank_tail(template_path, mapping_path):
     questionnaire = Questionnaire(
         project=ProjectInfo(project_name="Тестовый проект"),
