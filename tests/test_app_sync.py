@@ -153,7 +153,7 @@ def test_random_test_project_has_required_fields() -> None:
     assert project["report_date"] == app.date.today()
 
 
-def test_version_test_fill_click_requires_four_clicks(monkeypatch) -> None:
+def test_generator_test_fill_click_requires_four_clicks(monkeypatch) -> None:
     session_state = FakeSessionState()
     applied = []
     reruns = []
@@ -161,17 +161,17 @@ def test_version_test_fill_click_requires_four_clicks(monkeypatch) -> None:
     monkeypatch.setattr(app.st, "rerun", lambda: reruns.append(True))
     monkeypatch.setattr(app, "_apply_test_questionnaire", lambda options: applied.append(options))
 
-    app._handle_version_test_fill_click("options")
-    app._handle_version_test_fill_click("options")
-    app._handle_version_test_fill_click("options")
+    app._handle_generator_test_fill_click("options")
+    app._handle_generator_test_fill_click("options")
+    app._handle_generator_test_fill_click("options")
 
-    assert session_state["epss_test_fill_click_count"] == 3
+    assert session_state["generator_test_fill_click_count"] == 3
     assert applied == []
     assert reruns == []
 
-    app._handle_version_test_fill_click("options")
+    app._handle_generator_test_fill_click("options")
 
-    assert session_state["epss_test_fill_click_count"] == 0
+    assert session_state["generator_test_fill_click_count"] == 0
     assert applied == ["options"]
     assert reruns == [True]
 

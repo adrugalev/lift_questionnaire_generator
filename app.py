@@ -20,7 +20,7 @@ from src.excel_generator import ExcelGenerationError, generate_questionnaire_xls
 from src.file_utils import safe_filename
 from src.models import LiftGroup, ProjectInfo, Questionnaire
 from src.options_manager import OptionsManager
-from src.version import app_version_label
+from src.version import app_version_history, app_version_label
 from src.validators import MGN_ACCESSIBILITY_WARNING, ValidationMessage, validate_questionnaire
 
 
@@ -425,22 +425,37 @@ MGN_ACCESSIBILITY_FIELD = "mgn_accessibility"
 MGN_VOICE_OPTION_FIELD = "option_russian_voice"
 
 
-def _render_version_caption(options: OptionsManager) -> None:
+@st.dialog("История версий")
+def _show_version_history_dialog() -> None:
+    for entry in app_version_history():
+        st.markdown(f"**Версия {entry.revision} от {entry.date}**")
+        for change in entry.changes:
+            st.markdown(f"- {change}")
+
+
+def _render_version_caption() -> None:
     st.markdown(
         '<span class="version-trigger-scope"></span>',
         unsafe_allow_html=True,
     )
-    if st.button(app_version_label(), key="version_test_fill_click"):
-        _handle_version_test_fill_click(options)
+    if st.button(app_version_label(), key="version_history_button"):
+        _show_version_history_dialog()
 
 
-def _handle_version_test_fill_click(options: OptionsManager) -> None:
-    click_count = int(st.session_state.get("epss_test_fill_click_count", 0)) + 1
+def _render_app_header(options: OptionsManager) -> None:
+    st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
+    if st.button("Генератор", key="generator_test_fill_click"):
+        _handle_generator_test_fill_click(options)
+    _render_version_caption()
+
+
+def _handle_generator_test_fill_click(options: OptionsManager) -> None:
+    click_count = int(st.session_state.get("generator_test_fill_click_count", 0)) + 1
     if click_count < 4:
-        st.session_state.epss_test_fill_click_count = click_count
+        st.session_state.generator_test_fill_click_count = click_count
         return
 
-    st.session_state.epss_test_fill_click_count = 0
+    st.session_state.generator_test_fill_click_count = 0
     _apply_test_questionnaire(options)
     st.rerun()
 
@@ -587,8 +602,7 @@ def main() -> None:
     options = _options_manager()
     _init_state()
     _apply_pending_draft_restore()
-    st.markdown('<div class="app-header-title">Генератор опросных листов EPSS</div>', unsafe_allow_html=True)
-    _render_version_caption(options)
+    _render_app_header(options)
 
     _render_lift_team_sidebar()
     _render_project_summary_sidebar()
@@ -640,6 +654,42 @@ def _filled_field_styles_css() -> str:
             letter-spacing: 0;
             line-height: 1.08;
             margin: 0;
+        }
+
+        div.st-key-generator_test_fill_click {
+            height: 0 !important;
+            margin: 0 !important;
+            min-height: 0 !important;
+            position: relative;
+            z-index: 2;
+        }
+
+        div.st-key-generator_test_fill_click div[data-testid="stButton"] button,
+        div.st-key-generator_test_fill_click div[data-testid="stButton"] button:hover,
+        div.st-key-generator_test_fill_click div[data-testid="stButton"] button:focus,
+        div.st-key-generator_test_fill_click div[data-testid="stButton"] button:active {
+            background: transparent !important;
+            border: 0 !important;
+            box-shadow: none !important;
+            font-size: 3.05rem !important;
+            font-weight: 700 !important;
+            height: 3.3rem !important;
+            left: 0;
+            line-height: 1.08 !important;
+            min-height: 3.3rem !important;
+            opacity: 0 !important;
+            outline: none !important;
+            padding: 0 !important;
+            position: absolute;
+            top: -2.4rem;
+            transform: none !important;
+            width: auto !important;
+        }
+
+        div.st-key-generator_test_fill_click div[data-testid="stButton"] button p {
+            font-size: 3.05rem !important;
+            font-weight: 700 !important;
+            line-height: 1.08 !important;
         }
 
         div[data-testid="stElementContainer"]:has(.version-trigger-scope) {
