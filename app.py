@@ -179,6 +179,7 @@ SELECT_WITHOUT_CUSTOM_OPTION_KEYS = {
     "handrail_type",
     "lift_type",
     "lop_type",
+    "machine_room",
     "mirror",
     "seismic",
     "shaft_material",
@@ -233,6 +234,7 @@ NUMERIC_FIELDS = {
     "shaft_depth_mm": int,
     "pit_depth_mm": int,
     "overhead_mm": int,
+    "machine_room_height_mm": int,
 }
 
 SPECIAL_DIMENSION_FIELDS = {
@@ -243,6 +245,7 @@ SPECIAL_DIMENSION_FIELDS = {
     "shaft_depth_mm",
     "pit_depth_mm",
     "overhead_mm",
+    "machine_room_height_mm",
 }
 
 CAPACITY_OPTIONS_KG = [
@@ -282,6 +285,8 @@ SPEED_OPTIONS_MS = [
 DEFAULT_LIFT_TYPE = "Грузопассажирский"
 DEFAULT_MAIN_LANDING_FLOOR = "1"
 DEFAULT_MACHINE_ROOM = "Без машинного помещения"
+MACHINE_ROOM_WITH_VALUE = "С машинным помещением"
+MACHINE_ROOM_HEIGHT_FIELD = "machine_room_height_mm"
 DEFAULT_SHAFT_MATERIAL = "Железобетон"
 DEFAULT_SEISMIC = "НЕТ"
 DEFAULT_FIRE_RESISTANCE = "EI-60"
@@ -390,6 +395,7 @@ FIELD_GROUPS = {
     ],
     "Шахта": [
         ("machine_room", "Машинное помещение", "select", "machine_room"),
+        (MACHINE_ROOM_HEIGHT_FIELD, "Высота машинного помещения, мм", "number", None),
         ("shaft_material", "Материал шахты", "select", "shaft_material"),
         ("shaft_width_mm", "Ширина шахты, мм", "number", None),
         ("shaft_depth_mm", "Глубина шахты, мм", "number", None),
@@ -1916,7 +1922,7 @@ def _render_active_group_form(options: OptionsManager) -> None:
         section = _normalize_group_section_name(section) or section_names[0]
         st.session_state[active_section_key] = section
         st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
-        fields = FIELD_GROUPS[section]
+        fields = _section_fields_for_group(section, group)
         if section == "Двери":
             upper_fields = [item for item in fields if item[0] not in DOOR_FINISH_FIELDS]
             finish_fields = [item for item in fields if item[0] in DOOR_FINISH_FIELDS]
@@ -1932,6 +1938,20 @@ def _render_active_group_form(options: OptionsManager) -> None:
                 _render_group_field_grid(fields, column_count, group, defaults, options, index)
             if section == "Сигнализация":
                 _render_selected_image_previews(fields, group)
+
+
+def _section_fields_for_group(
+    section: str,
+    group: dict[str, Any],
+) -> list[tuple[str, str, str, str | None]]:
+    fields = FIELD_GROUPS[section]
+    if section == "Шахта" and not _has_machine_room(group.get("machine_room")):
+        return [item for item in fields if item[0] != MACHINE_ROOM_HEIGHT_FIELD]
+    return fields
+
+
+def _has_machine_room(value: Any) -> bool:
+    return str(value or "").strip().casefold() == MACHINE_ROOM_WITH_VALUE.casefold()
 
 
 def _add_group() -> None:
@@ -2372,12 +2392,12 @@ def _completed_sections(group: dict[str, Any]) -> set[str]:
 def _section_is_complete(section: str, group: dict[str, Any]) -> bool:
     return all(
         _field_is_complete(field, group)
-        for field, _, _, _ in FIELD_GROUPS[section]
+        for field, _, _, _ in _section_fields_for_group(section, group)
     )
 
 
 def _field_is_complete(field: str, group: dict[str, Any]) -> bool:
-    if field in ADDITIONAL_OPTION_TRANSLATIONS:
+    if field == MACHINE_ROOM_HEIGHT_FIELD or field in ADDITIONAL_OPTION_TRANSLATIONS:
         return True
     paired_source = _paired_finish_source_field(field)
     if paired_source:
@@ -2590,6 +2610,10 @@ def _collect_group_from_state(index: int, defaults: dict[str, Any]) -> dict[str,
                     st.session_state[key] = value
                 group[field] = value
                 draft[field] = value
+    if not _has_machine_room(group.get("machine_room")):
+        group.pop(MACHINE_ROOM_HEIGHT_FIELD, None)
+        draft.pop(MACHINE_ROOM_HEIGHT_FIELD, None)
+        st.session_state.pop(f"group_{index}_{MACHINE_ROOM_HEIGHT_FIELD}", None)
     if group.get("stops") not in ("", None):
         _apply_stops_derived_fields(index, group.get("stops"), sync_widgets=False)
         if not _is_through_cabin_for_group(index, draft):
@@ -3496,6 +3520,8 @@ def _drop_empty(data: dict[str, Any]) -> dict[str, Any]:
 
 def _prepare_group_for_model(data: dict[str, Any]) -> dict[str, Any]:
     group = dict(data)
+    if not _has_machine_room(group.get("machine_room")):
+        group.pop(MACHINE_ROOM_HEIGHT_FIELD, None)
     _apply_paired_finish_fields(group, SIGNAL_FINISH_FIELDS)
     _apply_paired_finish_fields(group, CABIN_COMPONENT_FINISH_FIELDS)
     _apply_mgn_option_dependency(group)

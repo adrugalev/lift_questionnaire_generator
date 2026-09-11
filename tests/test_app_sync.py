@@ -136,8 +136,8 @@ def test_random_test_groups_fill_every_form_field(monkeypatch) -> None:
 
     assert 2 <= len(groups) <= 4
     for group in groups:
-        for fields in app.FIELD_GROUPS.values():
-            for field, _, _, _ in fields:
+        for section in app.FIELD_GROUPS:
+            for field, _, _, _ in app._section_fields_for_group(section, group):
                 assert field in group
                 assert group[field] not in ("", None)
 
@@ -187,6 +187,10 @@ def test_shaft_material_options_are_curated_and_without_custom_choice(monkeypatc
         "Металлокаркас",
     ]
     assert "shaft_material" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
+
+
+def test_machine_room_options_do_not_allow_custom_choice() -> None:
+    assert "machine_room" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
 
 
 def test_fire_resistance_has_no_custom_choice(monkeypatch) -> None:
@@ -1459,6 +1463,16 @@ def test_group_defaults_keep_existing_machine_room(monkeypatch) -> None:
     assert app._group_defaults(0)["machine_room"] == "С машинным помещением"
 
 
+def test_machine_room_height_is_visible_only_with_machine_room() -> None:
+    field = app.MACHINE_ROOM_HEIGHT_FIELD
+
+    without_room = app._section_fields_for_group("Шахта", {"machine_room": "Без машинного помещения"})
+    with_room = app._section_fields_for_group("Шахта", {"machine_room": "С машинным помещением"})
+
+    assert field not in {item[0] for item in without_room}
+    assert field in {item[0] for item in with_room}
+
+
 def test_group_defaults_use_no_seismic(monkeypatch) -> None:
     session_state = FakeSessionState({
         "prefill_groups": [{}],
@@ -1607,6 +1621,7 @@ def test_dimension_fields_accept_free_text(monkeypatch) -> None:
     assert app._parse_number("РАСЧЁТНОЕ", "group_0_cabin_width_mm") == "РАСЧЁТНОЕ"
     assert app._parse_number("по проекту", "group_0_cabin_depth_mm") == "по проекту"
     assert app._parse_number("МАКСИМАЛЬНОЕ", "group_0_shaft_depth_mm") == "МАКСИМАЛЬНОЕ"
+    assert app._parse_number("РАСЧЁТНОЕ", "group_0_machine_room_height_mm") == "РАСЧЁТНОЕ"
     assert app._parse_number("МАКСИМАЛЬНОЕ", "group_0_stops") is None
     assert warnings == ["Поле содержит нечисловое значение: МАКСИМАЛЬНОЕ"]
 
@@ -1728,6 +1743,28 @@ def test_unselected_materials_are_not_exported_as_partial_values() -> None:
     group_without_handrail = app._prepare_group_for_model({"handrail_type": "Без поручня"})
 
     assert group_without_handrail["handrail_type"] == "Без поручня"
+
+
+def test_machine_room_height_is_removed_without_machine_room() -> None:
+    without_room = app._prepare_group_for_model({
+        "machine_room": "Без машинного помещения",
+        "machine_room_height_mm": "2500",
+    })
+    with_room = app._prepare_group_for_model({
+        "machine_room": "С машинным помещением",
+        "machine_room_height_mm": "2500",
+    })
+
+    assert "machine_room_height_mm" not in without_room
+    assert with_room["machine_room_height_mm"] == "2500"
+
+
+def test_machine_room_height_is_optional_for_section_completion() -> None:
+    group = {field: "filled" for field, _, _, _ in app.FIELD_GROUPS["Шахта"]}
+    group["machine_room"] = "С машинным помещением"
+    group["machine_room_height_mm"] = ""
+
+    assert app._section_is_complete("Шахта", group)
 
 
 def test_section_completion_requires_all_section_fields() -> None:

@@ -166,6 +166,10 @@ QUESTIONNAIRE_FACTORY_ROW_ORDER = {
 }
 QUESTIONNAIRE_DOOR_MODEL_LABEL = "Модель дверей"
 QUESTIONNAIRE_DOOR_MODEL_LABEL_ZH = "门机型号"
+QUESTIONNAIRE_MACHINE_ROOM_WITH_VALUE = "С машинным помещением"
+QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD = "machine_room_height_mm"
+QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL = "Высота машинного помещения, мм"
+QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL_ZH = "机房高度，毫米"
 QUESTIONNAIRE_SECTION_TITLES = {
     "Кабина",
     "Двери кабины",
@@ -206,6 +210,8 @@ def generate_questionnaire_xlsx(
         raise ExcelGenerationError("Нужна хотя бы одна группа лифтов.")
 
     _ensure_door_model_row(worksheet, group_rows)
+    if _questionnaire_has_machine_room_height(questionnaire):
+        _insert_machine_room_height_row(worksheet, group_rows)
     _prepare_group_columns(worksheet, first_group_col, group_count)
     additional_options_by_group, additional_options = _additional_options_by_group(questionnaire)
     if additional_options and "additional_options" in group_rows:
@@ -430,6 +436,8 @@ def _project_header_text_zh(
 def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
     value = getattr(group, field_name, None)
     if _is_unselected_excel_value(value):
+        return None
+    if field_name == QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD and not _group_has_machine_room(group):
         return None
     if field_name in EXCEL_FINISH_VALUE_FIELDS and not _is_selected_excel_finish_value(value):
         return None
@@ -1149,6 +1157,33 @@ def _prepare_group_columns(worksheet: Worksheet, first_group_col: int, group_cou
             worksheet.insert_cols(column)
         if column > first_group_col + 1:
             _copy_column_style(worksheet, first_group_col, column)
+
+
+def _questionnaire_has_machine_room_height(questionnaire: Questionnaire) -> bool:
+    return any(
+        _group_has_machine_room(group)
+        and not _is_unselected_excel_value(getattr(group, QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD, None))
+        for group in questionnaire.lift_groups
+    )
+
+
+def _group_has_machine_room(group: Any) -> bool:
+    value = getattr(group, "machine_room", None)
+    return str(value or "").strip().casefold() == QUESTIONNAIRE_MACHINE_ROOM_WITH_VALUE.casefold()
+
+
+def _insert_machine_room_height_row(worksheet: Worksheet, group_rows: dict[str, int]) -> None:
+    if "machine_room" not in group_rows:
+        return
+
+    machine_room_row = int(group_rows["machine_room"])
+    insert_at = machine_room_row + 1
+    worksheet.insert_rows(insert_at)
+    _copy_row_style(worksheet, insert_at + 1, insert_at)
+    worksheet.cell(row=insert_at, column=1).value = QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL
+    worksheet.cell(row=insert_at, column=2).value = QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_LABEL_ZH
+    _shift_group_rows_after(group_rows, machine_room_row, 1)
+    group_rows[QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD] = insert_at
 
 
 def _ensure_door_model_row(worksheet: Worksheet, group_rows: dict[str, int]) -> None:

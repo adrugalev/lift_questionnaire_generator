@@ -75,6 +75,7 @@ class LiftGroup(BaseModel):
     other_floors_lop_type: Optional[str] = None
     other_floors_lop_finish: Optional[str] = None
     machine_room: Optional[str] = None
+    machine_room_height_mm: Optional[DimensionValue] = None
     shaft_material: Optional[str] = None
     shaft_width_mm: Optional[DimensionValue] = None
     shaft_depth_mm: Optional[DimensionValue] = None
@@ -91,6 +92,7 @@ class LiftGroup(BaseModel):
         "cabin_width_mm",
         "cabin_depth_mm",
         "cabin_height_mm",
+        "machine_room_height_mm",
         "shaft_width_mm",
         "shaft_depth_mm",
         "pit_depth_mm",

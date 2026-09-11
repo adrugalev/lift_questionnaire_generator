@@ -26,12 +26,14 @@ def test_lift_group_accepts_text_cabin_and_shaft_dimensions():
     group = LiftGroup(
         cabin_width_mm="РАСЧЁТНОЕ",
         cabin_depth_mm="МАКСИМАЛЬНОЕ",
+        machine_room_height_mm="ПО ПРОЕКТУ",
         shaft_width_mm="МАКСИМАЛЬНОЕ",
         pit_depth_mm="МИНИМАЛЬНОЕ",
     )
 
     assert group.cabin_width_mm == "РАСЧЁТНОЕ"
     assert group.cabin_depth_mm == "МАКСИМАЛЬНОЕ"
+    assert group.machine_room_height_mm == "ПО ПРОЕКТУ"
     assert group.shaft_width_mm == "МАКСИМАЛЬНОЕ"
     assert group.pit_depth_mm == "МИНИМАЛЬНОЕ"
 
@@ -46,10 +48,12 @@ def test_lift_group_converts_numeric_dimension_text_to_integer():
     group = LiftGroup(
         cabin_width_mm="2700",
         cabin_depth_mm="1750.0",
+        machine_room_height_mm="2500",
         shaft_width_mm="1500,0",
     )
 
     assert group.cabin_width_mm == 2700
     assert group.cabin_depth_mm == 1750
+    assert group.machine_room_height_mm == 2500
     assert group.shaft_width_mm == 1500
 

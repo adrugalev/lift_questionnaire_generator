@@ -44,6 +44,7 @@ def validate_lift_group(group: LiftGroup, index: int = 1) -> list[ValidationMess
         (group.cabin_height_mm, "Высота кабины"),
         (group.landing_door_width_mm, "Ширина дверей"),
         (group.landing_door_height_mm, "Высота дверей"),
+        (group.machine_room_height_mm, "Высота машинного помещения"),
         (group.pit_depth_mm, "Глубина приямка"),
         (group.overhead_mm, "Высота верхнего этажа"),
     ]:

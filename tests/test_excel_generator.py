@@ -118,6 +118,78 @@ def test_numeric_dimension_text_is_written_as_number(template_path, mapping_path
     assert ws.cell(row=depth_row, column=3).data_type == "s"
 
 
+def test_machine_room_height_row_is_inserted_only_when_filled(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                machine_room="С машинным помещением",
+                machine_room_height_mm="2600",
+                shaft_material="Железобетон",
+            ),
+            LiftGroup(
+                lift_name="Л2",
+                quantity=1,
+                machine_room="Без машинного помещения",
+                shaft_material="Кирпичная",
+            ),
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["A43"].value == "Машинное помещение"
+    assert ws["A44"].value == "Высота машинного помещения, мм"
+    assert ws["B44"].value == "机房高度，毫米"
+    assert ws["C44"].value == 2600
+    assert ws["D44"].value is None
+    assert ws["A45"].value == "Материал шахты"
+    assert ws["C45"].value == "Железобетон"
+    assert ws["D45"].value == "Кирпичная"
+    assert ws["A44"]._style == ws["A45"]._style
+
+
+def test_machine_room_height_row_is_omitted_when_not_filled(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                machine_room="С машинным помещением",
+                shaft_material="Железобетон",
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    labels = [ws.cell(row=row, column=1).value for row in range(1, ws.max_row + 1)]
+    assert "Высота машинного помещения, мм" not in labels
+    assert ws["A44"].value == "Материал шахты"
+
+
+def test_machine_room_height_is_ignored_without_machine_room(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                machine_room="Без машинного помещения",
+                machine_room_height_mm=2500,
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    labels = [ws.cell(row=row, column=1).value for row in range(1, ws.max_row + 1)]
+    assert "Высота машинного помещения, мм" not in labels
+
+
 def test_door_model_is_written_inside_cabin_doors_section(template_path, mapping_path):
     questionnaire = Questionnaire(
         project=ProjectInfo(project_name="Тестовый проект"),

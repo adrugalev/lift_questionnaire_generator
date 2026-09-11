@@ -45,6 +45,7 @@ VISION_PROMPT = """Изучи страницы PDF/ТЗ по лифтам и и�
       "door_opening_type": "string|null",
       "fire_resistance": "string|null",
       "machine_room": "string|null",
+      "machine_room_height_mm": "int|string|null",
       "shaft_material": "string|null",
       "pit_depth_mm": "int|null",
       "overhead_mm": "int|null"
