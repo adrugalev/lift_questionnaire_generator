@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 APP_VERSION_DATE = "11.09.2026"
 # Дневной счетчик версии: при смене APP_VERSION_DATE начинается с 1.
-APP_VERSION_REVISION = 2
+APP_VERSION_REVISION = 4
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,22 @@ class VersionHistoryEntry:
 
 
 APP_VERSION_HISTORY = (
+    VersionHistoryEntry(
+        revision=4,
+        date="11.09.2026",
+        changes=(
+            "К имени сформированного Excel добавлен префикс «Опросный лист».",
+        ),
+    ),
+    VersionHistoryEntry(
+        revision=3,
+        date="11.09.2026",
+        changes=(
+            "Ускорено переключение разделов при заполнении больших проектов.",
+            "Облегчены изображения в окнах выбора материалов и оборудования.",
+            "Сохранение черновика переведено на сборку актуальных данных в момент скачивания.",
+        ),
+    ),
     VersionHistoryEntry(
         revision=2,
         date="11.09.2026",

@@ -8,11 +8,13 @@ import json
 import random
 import re
 from datetime import date
+from io import BytesIO
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import streamlit as st
 import streamlit.components.v1 as components
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pydantic import ValidationError
 
 from src.additional_options import ADDITIONAL_OPTION_FIELDS, ADDITIONAL_OPTION_TRANSLATIONS
@@ -50,6 +52,12 @@ PREVIOUS_CP_TEMPLATES = (
     / "templates"
 )
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+IMAGE_RENDER_VARIANTS = {
+    "thumbnail": (180, 78),
+    "dialog": (280, 80),
+    "lightbox": (1600, 88),
+}
+APP_REFRESH_GROUP_FIELDS = frozenset({"lift_name", "quantity", "capacity_kg", "speed_ms", "stops"})
 IMAGE_OPTION_DIRS = {
     "finish": LOCAL_TEMPLATES / "Walls_photo",
     "signal_steel_finish": LOCAL_TEMPLATES / "Walls_photo",
@@ -1440,8 +1448,7 @@ def _render_project_summary_sidebar() -> None:
 def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> None:
     restored_notice = st.session_state.pop("draft_restore_notice", None)
     restore_error = st.session_state.pop("draft_restore_error", None)
-    payload = _draft_payload(project_data, group_data)
-    content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    content = _deferred_draft_content(project_data, group_data)
     st.sidebar.markdown('<div class="draft-sidebar-gap"></div>', unsafe_allow_html=True)
     with st.sidebar.container(border=True):
         st.markdown("**Черновик заполнения**")
@@ -1458,6 +1465,7 @@ def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]
             mime="application/json",
             key="draft_save",
             use_container_width=True,
+            on_click="ignore",
         )
         if restored_notice:
             st.success(restored_notice)
@@ -1515,6 +1523,38 @@ def _draft_payload(project_data: dict[str, Any], group_data: list[dict[str, Any]
         "active_group_index": int(st.session_state.get("active_group_index", 0) or 0),
         "active_sections": active_sections,
     }
+
+
+def _deferred_draft_content(
+    project_data: dict[str, Any],
+    group_data: list[dict[str, Any]],
+) -> Callable[[], bytes]:
+    project_snapshot = dict(project_data)
+    live_group_data = st.session_state.get("group_drafts")
+    if not isinstance(live_group_data, list):
+        live_group_data = group_data
+    active_group_index = int(st.session_state.get("active_group_index", 0) or 0)
+    active_sections = {
+        str(index): section
+        for index in range(len(group_data))
+        if (section := _normalize_group_section_name(st.session_state.get(f"group_{index}_active_section")))
+    }
+
+    def build_content() -> bytes:
+        groups_snapshot = [dict(group) for group in live_group_data if isinstance(group, dict)]
+        payload = {
+            "type": DRAFT_FILE_KIND,
+            "schema_version": DRAFT_SCHEMA_VERSION,
+            "saved_at": date.today().isoformat(),
+            "app_version": app_version_label(),
+            "project": _json_ready(_drop_empty(project_snapshot)),
+            "groups": [_json_ready(_drop_empty(group)) for group in groups_snapshot],
+            "active_group_index": active_group_index,
+            "active_sections": active_sections,
+        }
+        return json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+
+    return build_content
 
 
 def _apply_draft_payload(payload: dict[str, Any]) -> None:
@@ -1879,10 +1919,7 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
         st.success(group_sync_notice)
 
     _render_active_group_form(options)
-    return [
-        _collect_group_from_state(group_index, _group_defaults(group_index))
-        for group_index in range(st.session_state.group_count)
-    ]
+    return nav_groups
 
 
 @st.fragment
@@ -3078,33 +3115,35 @@ def _image_preview_html(
 ) -> str:
     if not path or not path.exists():
         return '<div class="image-picker-thumb"></div>'
-    mime_type, encoded = _image_data_uri_parts(path)
+    thumbnail_mime, thumbnail_encoded = _image_data_uri_parts(path, "thumbnail")
+    lightbox_mime, lightbox_encoded = _image_data_uri_parts(path, "lightbox")
     alt = caption or path.stem
     lightbox_id = _image_lightbox_id(lightbox_key or str(path))
     return (
         f'<a class="image-picker-thumb image-lightbox-trigger" href="#{lightbox_id}" '
         f'aria-label="Увеличить: {html.escape(alt, quote=True)}">'
-        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(alt, quote=True)}">'
+        f'<img src="data:{thumbnail_mime};base64,{thumbnail_encoded}" alt="{html.escape(alt, quote=True)}">'
         "</a>"
-        + _image_lightbox_html(lightbox_id, mime_type, encoded, alt)
+        + _image_lightbox_html(lightbox_id, lightbox_mime, lightbox_encoded, alt)
     )
 
 
 def _selected_image_card_html(label: str, value: str, path: Path) -> str:
-    mime_type, encoded = _image_data_uri_parts(path)
+    thumbnail_mime, thumbnail_encoded = _image_data_uri_parts(path, "thumbnail")
+    lightbox_mime, lightbox_encoded = _image_data_uri_parts(path, "lightbox")
     lightbox_id = _image_lightbox_id(label, value, str(path))
     return (
         '<div class="selected-image-card">'
         f'<a class="selected-image-card-preview image-lightbox-trigger" href="#{lightbox_id}" '
         f'aria-label="Увеличить: {html.escape(value, quote=True)}">'
-        f'<img src="data:{mime_type};base64,{encoded}" alt="{html.escape(value, quote=True)}">'
+        f'<img src="data:{thumbnail_mime};base64,{thumbnail_encoded}" alt="{html.escape(value, quote=True)}">'
         "</a>"
         "<div>"
         f'<div class="selected-image-card-title">{html.escape(label)}</div>'
         f'<div class="selected-image-card-value">{html.escape(value)}</div>'
         "</div>"
         "</div>"
-        + _image_lightbox_html(lightbox_id, mime_type, encoded, value)
+        + _image_lightbox_html(lightbox_id, lightbox_mime, lightbox_encoded, value)
     )
 
 
@@ -3132,7 +3171,7 @@ def _image_lightbox_html(
 
 
 def _dialog_image_tile_html(label: str, path: Path) -> str:
-    mime_type, encoded = _image_data_uri_parts(path)
+    mime_type, encoded = _image_data_uri_parts(path, "dialog")
     return (
         '<div class="image-dialog-tile">'
         f'<div class="image-dialog-image"><img src="data:{mime_type};base64,{encoded}" alt="{html.escape(label)}"></div>'
@@ -3141,25 +3180,51 @@ def _dialog_image_tile_html(label: str, path: Path) -> str:
     )
 
 
-def _image_data_uri_parts(path: Path) -> tuple[str, str]:
+def _image_data_uri_parts(path: Path, variant: str = "thumbnail") -> tuple[str, str]:
     try:
         stat = path.stat()
     except OSError:
         return "image/png", ""
-    return _cached_image_data_uri_parts(str(path), stat.st_mtime_ns, stat.st_size)
+    return _cached_image_data_uri_parts(str(path), stat.st_mtime_ns, stat.st_size, variant)
 
 
-@st.cache_data(show_spinner=False, max_entries=512)
-def _cached_image_data_uri_parts(path: str, modified_ns: int, size: int) -> tuple[str, str]:
+@st.cache_data(show_spinner=False, max_entries=1024)
+def _cached_image_data_uri_parts(
+    path: str,
+    modified_ns: int,
+    size: int,
+    variant: str,
+) -> tuple[str, str]:
     del modified_ns, size
     image_path = Path(path)
-    mime_type = (
-        "image/jpeg"
-        if image_path.suffix.lower() in {".jpg", ".jpeg"}
-        else f"image/{image_path.suffix.lower().lstrip('.')}"
-    )
-    encoded = base64.b64encode(image_path.read_bytes()).decode("ascii")
+    max_dimension, quality = IMAGE_RENDER_VARIANTS.get(variant, IMAGE_RENDER_VARIANTS["thumbnail"])
+    try:
+        with Image.open(image_path) as source:
+            image = ImageOps.exif_transpose(source)
+            image.thumbnail((max_dimension, max_dimension), Image.Resampling.LANCZOS)
+            if image.mode in {"RGBA", "LA"} or (image.mode == "P" and "transparency" in image.info):
+                rgba = image.convert("RGBA")
+                background = Image.new("RGBA", rgba.size, "white")
+                background.alpha_composite(rgba)
+                image = background.convert("RGB")
+            else:
+                image = image.convert("RGB")
+            output = BytesIO()
+            image.save(output, format="JPEG", quality=quality, optimize=True)
+            raw_data = output.getvalue()
+        mime_type = "image/jpeg"
+    except (OSError, ValueError, UnidentifiedImageError):
+        raw_data = image_path.read_bytes()
+        mime_type = _image_mime_type(image_path)
+    encoded = base64.b64encode(raw_data).decode("ascii")
     return mime_type, encoded
+
+
+def _image_mime_type(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    return f"image/{suffix.lstrip('.')}"
 
 
 def _apply_pending_widget_choice(key: str, group_index: int, field: str, default: Any) -> Any:
@@ -3239,7 +3304,7 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
 
 def _save_group_widget_value_from_fragment(group_index: int, field: str, key: str) -> None:
     _save_group_widget_value(group_index, field, key)
-    st.session_state.group_field_app_refresh_requested = True
+    _request_group_field_app_refresh(field)
 
 
 def _change_group_section(group_index: int, section_widget_key: str) -> None:
@@ -3260,7 +3325,7 @@ def _save_group_custom_value(group_index: int, field: str, key: str) -> None:
 
 def _save_group_custom_value_from_fragment(group_index: int, field: str, key: str) -> None:
     _save_group_custom_value(group_index, field, key)
-    st.session_state.group_field_app_refresh_requested = True
+    _request_group_field_app_refresh(field)
 
 
 def _save_group_checkbox_value(group_index: int, field: str, key: str) -> None:
@@ -3278,7 +3343,12 @@ def _save_group_checkbox_value(group_index: int, field: str, key: str) -> None:
 
 def _save_group_checkbox_value_from_fragment(group_index: int, field: str, key: str) -> None:
     _save_group_checkbox_value(group_index, field, key)
-    st.session_state.group_field_app_refresh_requested = True
+    _request_group_field_app_refresh(field)
+
+
+def _request_group_field_app_refresh(field: str) -> None:
+    if field in APP_REFRESH_GROUP_FIELDS:
+        st.session_state.group_field_app_refresh_requested = True
 
 
 def _truthy_yes_no(value: Any) -> bool:
@@ -3507,7 +3577,7 @@ def _questionnaire_download_filename(questionnaire: Questionnaire) -> str:
     project_name = safe_filename(questionnaire.project.project_name or "questionnaire")
     prepared_by = questionnaire.project.prepared_by
     report_date = questionnaire.project.report_date or date.today()
-    file_parts = [project_name]
+    file_parts = ["Опросный лист", project_name]
     if prepared_by:
         file_parts.append(safe_filename(prepared_by))
     file_parts.append(f"{report_date:%d.%m.%Y}")

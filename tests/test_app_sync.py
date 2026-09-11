@@ -1,4 +1,9 @@
+import base64
+import json
+from io import BytesIO
+
 import app
+from PIL import Image
 from app import SYNCABLE_GROUP_FIELDS
 from src.models import LiftGroup, ProjectInfo, Questionnaire
 from src.validators import ValidationMessage
@@ -1152,6 +1157,23 @@ def test_image_preview_html_uses_fixed_thumbnail_container(tmp_path) -> None:
     assert 'href="#image-lightbox-close"' in preview
 
 
+def test_image_data_uri_uses_bounded_variants(tmp_path) -> None:
+    image_path = tmp_path / "large-panel.png"
+    Image.new("RGB", (800, 4000), "#777777").save(image_path)
+
+    expected_limits = {"thumbnail": 180, "dialog": 280, "lightbox": 1600}
+    decoded_sizes: dict[str, tuple[int, int]] = {}
+    for variant, limit in expected_limits.items():
+        mime_type, encoded = app._image_data_uri_parts(image_path, variant)
+        with Image.open(BytesIO(base64.b64decode(encoded))) as rendered:
+            decoded_sizes[variant] = rendered.size
+        assert mime_type == "image/jpeg"
+        assert max(decoded_sizes[variant]) <= limit
+
+    assert decoded_sizes["thumbnail"][1] < decoded_sizes["dialog"][1]
+    assert decoded_sizes["dialog"][1] < decoded_sizes["lightbox"][1]
+
+
 def test_inline_thumbnail_css_fits_full_image() -> None:
     css = app._filled_field_styles_css()
 
@@ -1187,6 +1209,44 @@ def test_draft_sidebar_has_gap_from_project_summary() -> None:
     assert "height: 1.25rem;" in css
     assert ".draft-sidebar-gap {" in css
     assert "height: 2.5rem;" in css
+
+
+def test_deferred_draft_content_reads_latest_group_values(monkeypatch) -> None:
+    live_groups = [{"lift_name": "Л1", "capacity_kg": 630}]
+    session_state = FakeSessionState({
+        "group_drafts": live_groups,
+        "active_group_index": 0,
+        "group_0_active_section": "Кабина",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    build_content = app._deferred_draft_content(
+        {"project_name": "Проект"},
+        [dict(live_groups[0])],
+    )
+    live_groups[0]["capacity_kg"] = 777
+
+    payload = json.loads(build_content().decode("utf-8"))
+
+    assert payload["groups"][0]["capacity_kg"] == 777
+    assert payload["active_sections"] == {"0": "Кабина"}
+
+
+def test_fragment_field_change_only_requests_app_refresh_for_summary_fields(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_drafts": [{}],
+        "group_0_cabin_width_mm": "2100",
+        "group_0_capacity_kg": "1350",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._save_group_widget_value_from_fragment(0, "cabin_width_mm", "group_0_cabin_width_mm")
+
+    assert "group_field_app_refresh_requested" not in session_state
+
+    app._save_group_widget_value_from_fragment(0, "capacity_kg", "group_0_capacity_kg")
+
+    assert session_state["group_field_app_refresh_requested"] is True
 
 
 def test_draft_save_button_moves_below_an_uploaded_file() -> None:
@@ -1244,7 +1304,7 @@ def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) ->
         "key": "include_summary_sheet",
     }]
     assert generator_calls == [{"include_summary_sheet": False}]
-    assert download_calls[0]["file_name"] == "Бизнес-центр_Орбита_15.07.2026.xlsx"
+    assert download_calls[0]["file_name"] == "Опросный лист_Бизнес-центр_Орбита_15.07.2026.xlsx"
 
 
 def test_questionnaire_download_filename_uses_today_when_date_is_missing(monkeypatch) -> None:
@@ -1257,7 +1317,7 @@ def test_questionnaire_download_filename_uses_today_when_date_is_missing(monkeyp
 
     monkeypatch.setattr(app, "date", FakeDate)
 
-    assert app._questionnaire_download_filename(questionnaire) == "Проект_16.07.2026.xlsx"
+    assert app._questionnaire_download_filename(questionnaire) == "Опросный лист_Проект_16.07.2026.xlsx"
 
 
 def test_questionnaire_download_filename_includes_preparer_surname() -> None:
@@ -1270,7 +1330,7 @@ def test_questionnaire_download_filename_includes_preparer_surname() -> None:
     )
 
     assert app._questionnaire_download_filename(questionnaire) == (
-        "ЖК_Северный_квартал_Другалёв_16.07.2026.xlsx"
+        "Опросный лист_ЖК_Северный_квартал_Другалёв_16.07.2026.xlsx"
     )
 
 
