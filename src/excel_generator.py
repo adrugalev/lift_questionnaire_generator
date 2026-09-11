@@ -568,6 +568,10 @@ def _fit_questionnaire_row_height(worksheet: Worksheet, row: int, last_col: int)
         line_count = max(line_count, _estimated_wrapped_lines(str(cell.value), width))
     if not has_value:
         return
+    row_title = str(worksheet.cell(row=row, column=1).value or "").strip()
+    if row_title == QUESTIONNAIRE_ADDITIONAL_OTHER_LABEL:
+        worksheet.row_dimensions[row].height = QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT * line_count
+        return
     worksheet.row_dimensions[row].height = (
         QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT
         if line_count <= 1

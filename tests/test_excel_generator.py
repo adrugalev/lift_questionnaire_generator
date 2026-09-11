@@ -640,6 +640,31 @@ def test_additional_options_other_accepts_arbitrary_text():
     assert excel_generator._selected_text_value("   ") is None
 
 
+def test_additional_options_other_row_height_fits_all_entered_lines(template_path, mapping_path):
+    other_text = "Первая строка\nВторая строка\nТретья строка\nЧетвёртая строка"
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                additional_options_other=other_text,
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+    other_row = next(
+        row
+        for row in range(1, ws.max_row + 1)
+        if ws.cell(row=row, column=1).value == "Прочее"
+    )
+
+    assert ws.cell(row=other_row, column=3).value == other_text
+    assert ws.cell(row=other_row, column=3).alignment.wrap_text
+    assert ws.row_dimensions[other_row].height == pytest.approx(57.6)
+
+
 def test_factory_rows_use_reference_format_and_clear_blank_tail(template_path, mapping_path):
     questionnaire = Questionnaire(
         project=ProjectInfo(project_name="Тестовый проект"),
