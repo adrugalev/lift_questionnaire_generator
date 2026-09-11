@@ -51,6 +51,7 @@ class LiftGroup(BaseModel):
     side_wall_finish: Optional[str] = None
     rear_wall_finish: Optional[str] = None
     front_wall_finish: Optional[str] = None
+    cabin_wall_afp: Optional[str] = None
     floor_finish: Optional[str] = None
     handrail_type: Optional[str] = None
     handrail_finish: Optional[str] = None
@@ -65,6 +66,7 @@ class LiftGroup(BaseModel):
     landing_door_height_mm: Optional[int] = Field(default=None, gt=0)
     main_floor_landing_door_finish: Optional[str] = None
     other_floors_landing_door_finish: Optional[str] = None
+    door_finish_afp: Optional[str] = None
     fire_resistance: Optional[str] = None
     firefighter_mode: Optional[str] = None
     cop_type: Optional[str] = None
@@ -76,6 +78,7 @@ class LiftGroup(BaseModel):
     other_floors_lop_finish: Optional[str] = None
     floor_indicator_type: Optional[str] = None
     floor_indicator_finish: Optional[str] = None
+    signal_finish_afp: Optional[str] = None
     machine_room: Optional[str] = None
     machine_room_height_mm: Optional[DimensionValue] = None
     shaft_material: Optional[str] = None

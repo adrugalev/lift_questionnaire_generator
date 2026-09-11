@@ -22,6 +22,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
 from .additional_options import ADDITIONAL_OPTIONS, AdditionalOption
+from .materials import AFP_MATERIAL_FIELDS_BY_FLAG, is_stainless_steel_finish
 from .models import Questionnaire
 
 
@@ -127,6 +128,7 @@ EXCEL_ALLOWED_TEXT_FINISH_VALUES = {
     "под отделку",
 }
 EXCEL_ARTICLE_RE = re.compile(r"\b[A-Z]{1,3}-[A-Z]{0,4}\d+[A-Z]*\b", re.IGNORECASE)
+AFP_SUFFIX = "AFP"
 EMU_PER_PIXEL = 9525
 VISUAL_SUMMARY_BODY_FONT_SIZE = 12
 VISUAL_SUMMARY_TITLE_FONT_SIZE = 14
@@ -207,6 +209,7 @@ def generate_questionnaire_xlsx(
     *,
     include_summary_sheet: bool = True,
 ) -> bytes:
+    questionnaire = _questionnaire_with_afp_materials(questionnaire)
     questionnaire = _questionnaire_with_grouped_identical_lifts(questionnaire)
     mapping = load_mapping(mapping_path)
     workbook = load_workbook(template_path)
@@ -292,6 +295,50 @@ def generate_questionnaire_xlsx(
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_bytes(content)
     return content
+
+
+def _questionnaire_with_afp_materials(questionnaire: Questionnaire) -> Questionnaire:
+    groups = []
+    has_updates = False
+    for group in questionnaire.lift_groups:
+        updates: dict[str, str] = {}
+        for flag_field, material_fields in AFP_MATERIAL_FIELDS_BY_FLAG.items():
+            if not _afp_enabled(getattr(group, flag_field, None)):
+                continue
+            for material_field in material_fields:
+                value = getattr(group, material_field, None)
+                updated_value = _material_with_afp(value)
+                if updated_value is not None and updated_value != value:
+                    updates[material_field] = updated_value
+        if updates:
+            groups.append(group.model_copy(update=updates, deep=True))
+            has_updates = True
+        else:
+            groups.append(group)
+    if not has_updates:
+        return questionnaire
+    return questionnaire.model_copy(update={"lift_groups": groups})
+
+
+def _afp_enabled(value: Any) -> bool:
+    if value is True:
+        return True
+    return str(value or "").strip().casefold() in {"да", "yes", "true", "1"}
+
+
+def _material_with_afp(value: Any) -> str | None:
+    if _is_unselected_excel_value(value):
+        return None
+    text = str(value).strip()
+    if not is_stainless_steel_finish(text):
+        return text
+    if re.search(rf"(?:^|\s){AFP_SUFFIX}$", text, flags=re.IGNORECASE):
+        return text
+    return f"{text} {AFP_SUFFIX}"
+
+
+def _without_afp_suffix(value: str) -> str:
+    return re.sub(rf"\s+{AFP_SUFFIX}$", "", value.strip(), flags=re.IGNORECASE)
 
 
 def _questionnaire_with_grouped_identical_lifts(questionnaire: Questionnaire) -> Questionnaire:
@@ -488,6 +535,12 @@ def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
     finish_text = str(finish_value).strip()
     if _normalize_article_text(finish_text) in _normalize_article_text(value_text):
         return value_text
+    finish_without_afp = _without_afp_suffix(finish_text)
+    if (
+        finish_without_afp != finish_text
+        and _normalize_article_text(finish_without_afp) in _normalize_article_text(value_text)
+    ):
+        return _material_with_afp(value_text)
     return f"{value_text}, {finish_text}"
 
 

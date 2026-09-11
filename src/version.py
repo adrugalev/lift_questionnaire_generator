@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 APP_VERSION_DATE = "11.09.2026"
 # Дневной счетчик версии: при смене APP_VERSION_DATE начинается с 1.
-APP_VERSION_REVISION = 8
+APP_VERSION_REVISION = 13
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,43 @@ class VersionHistoryEntry:
 
 
 APP_VERSION_HISTORY = (
+    VersionHistoryEntry(
+        revision=13,
+        date="11.09.2026",
+        changes=(
+            "AFP ограничено материалами из нержавеющей стали.",
+            "Галочка AFP недоступна, если в разделе нет подходящего материала.",
+        ),
+    ),
+    VersionHistoryEntry(
+        revision=12,
+        date="11.09.2026",
+        changes=(
+            "Исправлено дублирование материала сигнализационных устройств при включённом AFP.",
+        ),
+    ),
+    VersionHistoryEntry(
+        revision=11,
+        date="11.09.2026",
+        changes=(
+            "На вкладке сигнализационного оборудования галочка AFP перенесена над блоком изображений.",
+        ),
+    ),
+    VersionHistoryEntry(
+        revision=10,
+        date="11.09.2026",
+        changes=(
+            "Галочки AFP аккуратно выровнены слева внизу соответствующих разделов.",
+        ),
+    ),
+    VersionHistoryEntry(
+        revision=9,
+        date="11.09.2026",
+        changes=(
+            "В разделы кабины, дверей и сигнализации добавлены отдельные флажки покрытия AFP.",
+            "При включённом AFP соответствующие материалы выводятся в опроснике с суффиксом AFP.",
+        ),
+    ),
     VersionHistoryEntry(
         revision=8,
         date="11.09.2026",

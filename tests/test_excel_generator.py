@@ -546,6 +546,146 @@ def test_selected_finish_articles_are_written_to_questionnaire(template_path, ma
     assert ws["C33"].value == "Покрытие под дерево E-05"
 
 
+def test_afp_is_appended_only_to_materials_controlled_by_each_checkbox(template_path, mapping_path):
+    material = "Шлифованная нержавеющая сталь EX-HS01"
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                cabin_wall_afp="ДА",
+                side_wall_finish=material,
+                rear_wall_finish=material,
+                front_wall_finish=material,
+                floor_finish="Покрытие EX-DB210",
+                handrail_finish=material,
+                ceiling_finish=material,
+                door_finish_afp="ДА",
+                cabin_door_finish=material,
+                main_floor_landing_door_finish=material,
+                other_floors_landing_door_finish=material,
+                signal_finish_afp="ДА",
+                cop_type="EX-AC99A",
+                cop_finish=material,
+                main_floor_lop_type="EX-JC99A",
+                main_floor_lop_finish=material,
+                other_floors_lop_type="EX-JC99A",
+                other_floors_lop_finish=material,
+                floor_indicator_type="EX-HD09",
+                floor_indicator_finish=material,
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    for cell in ("C18", "C19", "C20", "C29", "C33", "C34"):
+        assert ws[cell].value == f"{material} AFP"
+    assert ws["C21"].value == "Покрытие EX-DB210"
+    assert ws["C38"].value == f"EX-AC99A, {material} AFP"
+    assert ws["C41"].value == f"EX-JC99A, {material} AFP"
+    assert ws["C42"].value == f"EX-JC99A, {material} AFP"
+    assert ws["C40"].value == f"EX-HD09, {material}"
+
+
+def test_afp_is_not_appended_when_checkbox_is_off_and_is_never_duplicated(template_path, mapping_path):
+    material = "Шлифованная нержавеющая сталь EX-HS01"
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                cabin_wall_afp="НЕТ",
+                side_wall_finish=material,
+                rear_wall_finish=f"{material} AFP",
+                door_finish_afp="ДА",
+                cabin_door_finish=f"{material} AFP",
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["C18"].value == material
+    assert ws["C19"].value == f"{material} AFP"
+    assert ws["C29"].value == f"{material} AFP"
+
+
+def test_signal_afp_does_not_duplicate_material_already_combined_with_equipment(template_path, mapping_path):
+    material = "Шлифованная нержавеющая сталь EX-HS04 Black"
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                signal_finish_afp="ДА",
+                cop_type=f"EX-AC118A, {material}",
+                cop_finish=material,
+                main_floor_lop_type=f"EX-JC118B Touch, {material}",
+                main_floor_lop_finish=material,
+                other_floors_lop_type=f"HBP-HD11, {material}",
+                other_floors_lop_finish=material,
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["C38"].value == f"EX-AC118A, {material} AFP"
+    assert ws["C41"].value == f"EX-JC118B Touch, {material} AFP"
+    assert ws["C42"].value == f"HBP-HD11, {material} AFP"
+    for cell in ("C38", "C41", "C42"):
+        assert ws[cell].value.count(material) == 1
+        assert ws[cell].value.count("AFP") == 1
+
+
+def test_afp_is_not_appended_to_non_stainless_materials(template_path, mapping_path):
+    stainless = "Шлифованная нержавеющая сталь EX-HS01"
+    veneer = "Натуральное дерево, шпон PM-015"
+    leather = "Покрытие под кожу LF-01"
+    glass = "Цветное стекло CG-04"
+    painted = "Окрашенная сталь EX-YS12"
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                cabin_wall_afp="ДА",
+                side_wall_finish=stainless,
+                rear_wall_finish=veneer,
+                front_wall_finish=glass,
+                door_finish_afp="ДА",
+                cabin_door_finish=painted,
+                main_floor_landing_door_finish=leather,
+                other_floors_landing_door_finish=stainless,
+                signal_finish_afp="ДА",
+                cop_type="EX-AC99A",
+                cop_finish=painted,
+                main_floor_lop_type="EX-JC99A",
+                main_floor_lop_finish=stainless,
+                other_floors_lop_type="HBP-HD11",
+                other_floors_lop_finish=veneer,
+            )
+        ]
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+
+    assert ws["C18"].value == f"{stainless} AFP"
+    assert ws["C19"].value == veneer
+    assert ws["C20"].value == glass
+    assert ws["C29"].value == painted
+    assert ws["C33"].value == leather
+    assert ws["C34"].value == f"{stainless} AFP"
+    assert ws["C38"].value == f"EX-AC99A, {painted}"
+    assert ws["C41"].value == f"EX-JC99A, {stainless} AFP"
+    assert ws["C42"].value == f"HBP-HD11, {veneer}"
+
+
 def test_cyrillic_finish_that_fits_one_line_keeps_single_row_height(template_path, mapping_path):
     questionnaire = Questionnaire(
         project=ProjectInfo(project_name="Тестовый проект"),

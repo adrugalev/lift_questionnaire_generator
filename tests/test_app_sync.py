@@ -1893,6 +1893,7 @@ def test_signalization_fields_are_arranged_as_device_finish_pairs() -> None:
         "floor_indicator_type",
         "floor_indicator_finish",
         "display_type",
+        app.SIGNAL_FINISH_AFP_FIELD,
     ]
 
 
@@ -1909,8 +1910,115 @@ def test_door_model_and_fire_resistance_are_swapped_in_layout() -> None:
         "fire_resistance",
     ]
     assert door_fields.index("door_model") < door_fields.index("landing_door_width_mm")
-    assert door_fields[-1] == "fire_resistance"
+    assert door_fields[-2] == "fire_resistance"
+    assert door_fields[-1] == app.DOOR_FINISH_AFP_FIELD
     assert "door_model" in app.SYNCABLE_GROUP_FIELDS
+
+
+def test_afp_checkboxes_are_optional_and_syncable() -> None:
+    expected_fields = {
+        "Кабина": app.CABIN_WALL_AFP_FIELD,
+        "Двери": app.DOOR_FINISH_AFP_FIELD,
+        "Сигнализация": app.SIGNAL_FINISH_AFP_FIELD,
+    }
+
+    for section, expected_field in expected_fields.items():
+        field_metadata = {
+            field: (label, kind)
+            for field, label, kind, _ in app.FIELD_GROUPS[section]
+        }
+        assert field_metadata[expected_field] == (app.AFP_FIELD_LABEL, "checkbox_yes_no")
+        assert expected_field in app.SYNCABLE_GROUP_FIELDS
+        assert app._field_is_complete(expected_field, {})
+
+    for section, expected_field in expected_fields.items():
+        section_fields = [field for field, _, _, _ in app.FIELD_GROUPS[section]]
+        assert section_fields[-1] == expected_field
+
+
+def test_unchecked_afp_is_not_stored_in_group_draft(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{app.CABIN_WALL_AFP_FIELD: "ДА"}],
+        f"group_0_{app.CABIN_WALL_AFP_FIELD}": False,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._save_group_checkbox_value(
+        0,
+        app.CABIN_WALL_AFP_FIELD,
+        f"group_0_{app.CABIN_WALL_AFP_FIELD}",
+    )
+    group = app._collect_group_from_state(0, app._group_defaults(0))
+
+    assert app.CABIN_WALL_AFP_FIELD not in session_state["group_drafts"][0]
+    assert app.CABIN_WALL_AFP_FIELD not in group
+
+
+def test_afp_material_eligibility_is_limited_to_stainless_steel() -> None:
+    for material in (
+        "Шлифованная нержавеющая сталь EX-HS01",
+        "Зеркальная нержавеющая сталь EX-MS02 Gold",
+        "Матовая нержавеющая сталь EX-RS03 Bronze",
+        "Травленая нержавеющая сталь EX-ES05",
+        "Текстурированная нержавеющая сталь EX-TS19",
+        "HX-ES01",
+    ):
+        assert app.is_stainless_steel_finish(material)
+
+    for material in (
+        "Окрашенная сталь EX-YS12",
+        "Натуральное дерево, шпон PM-015",
+        "Покрытие под кожу LF-01",
+        "Цветное стекло CG-04",
+        "Покрытие под ткань TF-01",
+    ):
+        assert not app.is_stainless_steel_finish(material)
+
+
+def test_afp_checkbox_is_available_when_at_least_one_section_material_is_stainless(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{
+            "side_wall_finish": "Натуральное дерево, шпон PM-015",
+            "rear_wall_finish": "Шлифованная нержавеющая сталь EX-HS01",
+            "front_wall_finish": "Цветное стекло CG-04",
+        }],
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._afp_checkbox_is_available(0, app.CABIN_WALL_AFP_FIELD)
+    assert not app._afp_checkbox_is_available(0, app.DOOR_FINISH_AFP_FIELD)
+
+
+def test_afp_checkbox_is_disabled_and_cleared_without_stainless_material(monkeypatch) -> None:
+    field = app.CABIN_WALL_AFP_FIELD
+    key = f"group_0_{field}"
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{
+            field: "ДА",
+            "side_wall_finish": "Натуральное дерево, шпон PM-015",
+            "rear_wall_finish": "Окрашенная сталь EX-YS12",
+            "front_wall_finish": "Цветное стекло CG-04",
+        }],
+        key: True,
+    })
+    captured = {}
+
+    def fake_checkbox(label, **kwargs):
+        captured.update({"label": label, **kwargs})
+        return kwargs["value"]
+
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(app.st, "checkbox", fake_checkbox)
+
+    result = app._field_widget(app.AFP_FIELD_LABEL, "checkbox_yes_no", key, "ДА", object(), None, 0, field)
+
+    assert result == "НЕТ"
+    assert captured["disabled"] is True
+    assert captured["value"] is False
+    assert field not in session_state["group_drafts"][0]
 
 
 def test_capacity_select_accepts_custom_value(monkeypatch) -> None:

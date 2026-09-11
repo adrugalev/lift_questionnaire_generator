@@ -21,6 +21,7 @@ from src.additional_options import ADDITIONAL_OPTION_FIELDS, ADDITIONAL_OPTION_T
 from src.excel_generator import ExcelGenerationError, generate_questionnaire_xlsx
 from src.file_utils import safe_filename
 from src.models import LiftGroup, ProjectInfo, Questionnaire
+from src.materials import AFP_MATERIAL_FIELDS_BY_FLAG, is_stainless_steel_finish
 from src.options_manager import OptionsManager
 from src.version import app_version_history, app_version_label
 from src.validators import MGN_ACCESSIBILITY_WARNING, ValidationMessage, validate_questionnaire
@@ -300,6 +301,11 @@ DEFAULT_MACHINE_ROOM = "Без машинного помещения"
 MACHINE_ROOM_WITH_VALUE = "С машинным помещением"
 MACHINE_ROOM_HEIGHT_FIELD = "machine_room_height_mm"
 ADDITIONAL_OPTIONS_OTHER_FIELD = "additional_options_other"
+CABIN_WALL_AFP_FIELD = "cabin_wall_afp"
+DOOR_FINISH_AFP_FIELD = "door_finish_afp"
+SIGNAL_FINISH_AFP_FIELD = "signal_finish_afp"
+AFP_FIELDS = {CABIN_WALL_AFP_FIELD, DOOR_FINISH_AFP_FIELD, SIGNAL_FINISH_AFP_FIELD}
+AFP_FIELD_LABEL = "AFP, защитное покрытие от отпечатков пальцев"
 DEFAULT_SHAFT_MATERIAL = "Железобетон"
 DEFAULT_SEISMIC = "НЕТ"
 DEFAULT_FIRE_RESISTANCE = "EI-60"
@@ -327,6 +333,7 @@ SYNCABLE_GROUP_FIELDS = {
     "side_wall_finish",
     "rear_wall_finish",
     "front_wall_finish",
+    CABIN_WALL_AFP_FIELD,
     "floor_finish",
     "handrail_type",
     "handrail_finish",
@@ -339,6 +346,7 @@ SYNCABLE_GROUP_FIELDS = {
     "cabin_door_finish",
     "main_floor_landing_door_finish",
     "other_floors_landing_door_finish",
+    DOOR_FINISH_AFP_FIELD,
     "fire_resistance",
     "firefighter_mode",
     "cop_type",
@@ -350,6 +358,7 @@ SYNCABLE_GROUP_FIELDS = {
     "other_floors_lop_finish",
     "floor_indicator_type",
     "floor_indicator_finish",
+    SIGNAL_FINISH_AFP_FIELD,
     "machine_room",
     "shaft_material",
     "room_under_pit",
@@ -390,6 +399,7 @@ FIELD_GROUPS = {
         ("ceiling_finish", "Материал потолка", "select", "ceiling_steel_finish"),
         ("skirting_finish", "Плинтус", "select", "finish"),
         ("mirror", "Зеркало", "select", "mirror"),
+        (CABIN_WALL_AFP_FIELD, AFP_FIELD_LABEL, "checkbox_yes_no", None),
     ],
     "Двери": [
         ("door_opening_type", "Тип открывания дверей", "select", "door_opening_type"),
@@ -401,6 +411,7 @@ FIELD_GROUPS = {
         ("landing_door_height_mm", "Высота дверей, мм", "number", None),
         ("firefighter_mode", "Режим перевозки пожарных подразделений", "select", "yes_no"),
         ("fire_resistance", "Предел огнестойкости", "select", "fire_resistance"),
+        (DOOR_FINISH_AFP_FIELD, AFP_FIELD_LABEL, "checkbox_yes_no", None),
     ],
     "Сигнализация": [
         ("cop_type", "Панель управления кабины", "select", "cop_type"),
@@ -412,6 +423,7 @@ FIELD_GROUPS = {
         ("floor_indicator_type", "Индикация этажная", "select", "floor_indicator_type"),
         ("floor_indicator_finish", "Материал индикации этажной", "select", "signal_steel_finish"),
         ("display_type", "Тип дисплея", "select", "display_type"),
+        (SIGNAL_FINISH_AFP_FIELD, AFP_FIELD_LABEL, "checkbox_yes_no", None),
     ],
     "Шахта": [
         ("machine_room", "Машинное помещение", "select", "machine_room"),
@@ -435,6 +447,7 @@ DOOR_FINISH_FIELDS = {
     "cabin_door_finish",
     "main_floor_landing_door_finish",
     "other_floors_landing_door_finish",
+    DOOR_FINISH_AFP_FIELD,
 }
 WALL_FINISH_FIELDS = ("side_wall_finish", "rear_wall_finish", "front_wall_finish")
 WALL_LINKED_FINISH_FIELDS = (
@@ -564,6 +577,7 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "side_wall_finish": wall_finish,
             "rear_wall_finish": wall_finish,
             "front_wall_finish": wall_finish,
+            CABIN_WALL_AFP_FIELD: "ДА",
             "floor_finish": _random_select_value(options, "floor_finish") or "Под отделку",
             "handrail_type": _random_select_value(options, "handrail_type") or "EX-FS01",
             "handrail_finish": signal_finish,
@@ -579,6 +593,7 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "landing_door_height_mm": random.choice([2100, 2200, 2300]),
             "main_floor_landing_door_finish": wall_finish,
             "other_floors_landing_door_finish": wall_finish,
+            DOOR_FINISH_AFP_FIELD: "ДА",
             "firefighter_mode": random.choice(["ДА", "НЕТ"]),
             "cop_type": _random_select_value(options, "cop_type") or "EX-AC99A",
             "cop_finish": signal_finish,
@@ -588,6 +603,7 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "other_floors_lop_finish": signal_finish,
             "floor_indicator_type": _random_select_value(options, "floor_indicator_type") or "EX-HD09",
             "floor_indicator_finish": signal_finish,
+            SIGNAL_FINISH_AFP_FIELD: "ДА",
             "display_type": random.choice(["DOT-Matrix LED", "LCD (7-сегментный)", 'LCD 10,4"', 'LCD 15"']),
             "machine_room": DEFAULT_MACHINE_ROOM,
             "shaft_material": DEFAULT_SHAFT_MATERIAL,
@@ -1977,27 +1993,34 @@ def _render_active_group_form(options: OptionsManager) -> None:
         st.session_state[active_section_key] = section
         st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
         fields = _section_fields_for_group(section, group)
+        afp_fields = [item for item in fields if item[0] in AFP_FIELDS]
+        content_fields = [item for item in fields if item[0] not in AFP_FIELDS]
         if section == "Двери":
-            upper_fields = [item for item in fields if item[0] not in DOOR_FINISH_FIELDS]
-            finish_fields = [item for item in fields if item[0] in DOOR_FINISH_FIELDS]
+            upper_fields = [item for item in content_fields if item[0] not in DOOR_FINISH_FIELDS]
+            finish_fields = [item for item in content_fields if item[0] in DOOR_FINISH_FIELDS]
             _render_group_field_grid(upper_fields, 2, group, defaults, options, index)
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
             _render_group_field_grid(finish_fields, 2, group, defaults, options, index)
         elif section == "Дополнительные опции":
-            checkbox_fields = [item for item in fields if item[0] != ADDITIONAL_OPTIONS_OTHER_FIELD]
-            other_fields = [item for item in fields if item[0] == ADDITIONAL_OPTIONS_OTHER_FIELD]
+            checkbox_fields = [item for item in content_fields if item[0] != ADDITIONAL_OPTIONS_OTHER_FIELD]
+            other_fields = [item for item in content_fields if item[0] == ADDITIONAL_OPTIONS_OTHER_FIELD]
             _render_group_field_grid(checkbox_fields, 3, group, defaults, options, index)
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
             _render_group_field_grid(other_fields, 1, group, defaults, options, index)
         else:
-            has_visual_options = any(option_key in IMAGE_OPTION_DIRS for _, _, _, option_key in fields)
-            column_count = 2 if has_visual_options else 3 if len(fields) >= 8 else 2
+            has_visual_options = any(option_key in IMAGE_OPTION_DIRS for _, _, _, option_key in content_fields)
+            column_count = 2 if has_visual_options else 3 if len(content_fields) >= 8 else 2
             if section == "Сигнализация":
-                _render_signalization_fields(fields, group, defaults, options, index)
+                _render_signalization_fields(content_fields, group, defaults, options, index)
+                if afp_fields:
+                    st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
+                    _render_group_field_grid(afp_fields, 1, group, defaults, options, index)
+                _render_selected_image_previews(content_fields, group)
             else:
-                _render_group_field_grid(fields, column_count, group, defaults, options, index)
-            if section == "Сигнализация":
-                _render_selected_image_previews(fields, group)
+                _render_group_field_grid(content_fields, column_count, group, defaults, options, index)
+        if afp_fields and section != "Сигнализация":
+            st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
+            _render_group_field_grid(afp_fields, 1, group, defaults, options, index)
 
 
 def _section_fields_for_group(
@@ -2457,7 +2480,11 @@ def _section_is_complete(section: str, group: dict[str, Any]) -> bool:
 
 
 def _field_is_complete(field: str, group: dict[str, Any]) -> bool:
-    if field in {MACHINE_ROOM_HEIGHT_FIELD, ADDITIONAL_OPTIONS_OTHER_FIELD} or field in ADDITIONAL_OPTION_TRANSLATIONS:
+    if (
+        field in {MACHINE_ROOM_HEIGHT_FIELD, ADDITIONAL_OPTIONS_OTHER_FIELD}
+        or field in AFP_FIELDS
+        or field in ADDITIONAL_OPTION_TRANSLATIONS
+    ):
         return True
     paired_source = _paired_finish_source_field(field)
     if paired_source:
@@ -2658,7 +2685,7 @@ def _collect_group_from_state(index: int, defaults: dict[str, Any]) -> dict[str,
             if value == OTHER_OPTION:
                 value = st.session_state.get(f"{key}_custom")
             if kind == "checkbox_yes_no":
-                if field in ADDITIONAL_OPTION_TRANSLATIONS:
+                if field in ADDITIONAL_OPTION_TRANSLATIONS or field in AFP_FIELDS:
                     if not _truthy_yes_no(value):
                         draft.pop(field, None)
                         continue
@@ -2760,11 +2787,18 @@ def _field_widget(
             args=(group_index, field, key),
         )
     if kind == "checkbox_yes_no":
+        disabled = False
+        if field in AFP_FIELDS:
+            disabled = not _afp_checkbox_is_available(group_index, field)
+            if disabled:
+                st.session_state[key] = False
+                _ensure_group_draft(group_index).pop(field, None)
         current = _truthy_yes_no(st.session_state.get(key, default))
         checked = st.checkbox(
             label,
             value=current,
             key=key,
+            disabled=disabled,
             on_change=_save_group_checkbox_value_from_fragment,
             args=(group_index, field, key),
         )
@@ -3357,7 +3391,7 @@ def _save_group_custom_value_from_fragment(group_index: int, field: str, key: st
 def _save_group_checkbox_value(group_index: int, field: str, key: str) -> None:
     draft = _ensure_group_draft(group_index)
     checked = bool(st.session_state.get(key))
-    if field in ADDITIONAL_OPTION_TRANSLATIONS and not checked:
+    if (field in ADDITIONAL_OPTION_TRANSLATIONS or field in AFP_FIELDS) and not checked:
         draft.pop(field, None)
         return
     draft[field] = "ДА" if checked else "НЕТ"
@@ -3381,6 +3415,21 @@ def _truthy_yes_no(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().upper() in {"ДА", "YES", "TRUE", "1"}
+
+
+def _afp_checkbox_is_available(group_index: int, flag_field: str) -> bool:
+    material_fields = AFP_MATERIAL_FIELDS_BY_FLAG.get(flag_field, ())
+    if not material_fields:
+        return False
+    draft = _ensure_group_draft(group_index)
+    prefill_groups = st.session_state.get("prefill_groups") or []
+    prefill = prefill_groups[group_index] if group_index < len(prefill_groups) else {}
+    for material_field in material_fields:
+        key = f"group_{group_index}_{material_field}"
+        value = st.session_state.get(key, draft.get(material_field, prefill.get(material_field)))
+        if is_stainless_steel_finish(value):
+            return True
+    return False
 
 
 def _sync_empty_wall_finish_fields(group_index: int, source_field: str, value: Any) -> None:
