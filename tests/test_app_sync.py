@@ -538,8 +538,13 @@ def test_group_operation_has_no_custom_choice(monkeypatch) -> None:
 
     monkeypatch.setattr(app, "_image_options_for_key", lambda option_key: {})
 
-    assert app._select_values(FakeOptions(), "group_operation") == ["Одиночное", "Групповое", "DDS"]
+    assert app._select_values(FakeOptions(), "group_operation") == ["Одиночная", "Групповая", "DDS"]
     assert "group_operation" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
+
+
+def test_legacy_group_operation_values_are_normalized_for_export() -> None:
+    assert app._prepare_group_for_model({"group_operation": "Одиночное"})["group_operation"] == "Одиночная"
+    assert app._prepare_group_for_model({"group_operation": "Групповое"})["group_operation"] == "Групповая"
 
 
 def test_lift_type_options_exclude_hospital_and_custom_choice(monkeypatch) -> None:

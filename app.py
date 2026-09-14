@@ -567,7 +567,7 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "stops": stops,
             "underground_floors": underground_floors,
             "doors_count": doors_count,
-            "group_operation": "Одиночное" if quantity == 1 else random.choice(["Групповое", "DDS"]),
+            "group_operation": "Одиночная" if quantity == 1 else random.choice(["Групповая", "DDS"]),
             "button_marking": _button_marking_from_stops(stops, underground_floors),
             "main_landing_floor": DEFAULT_MAIN_LANDING_FLOOR,
             "cabin_type": cabin_type,
@@ -2665,6 +2665,8 @@ def _group_defaults(index: int) -> dict[str, Any]:
     draft = _ensure_group_draft(index)
     merged = dict(prefill)
     merged.update({key: value for key, value in draft.items() if value not in ("", None)})
+    if merged.get("group_operation") not in ("", None):
+        merged["group_operation"] = _normalize_group_operation(merged["group_operation"])
     merged.setdefault("lift_type", DEFAULT_LIFT_TYPE)
     merged.setdefault("main_landing_floor", DEFAULT_MAIN_LANDING_FLOOR)
     merged.setdefault("machine_room", DEFAULT_MACHINE_ROOM)
@@ -2804,6 +2806,7 @@ def _field_widget(
         )
         return "ДА" if checked else "НЕТ"
     if kind == "select" and option_key:
+        default = _normalize_select_option_value(option_key, default)
         values = _select_values(options, option_key, field)
         if field not in SELECT_WITHOUT_EMPTY_FIELDS:
             values = [""] + values
@@ -2811,6 +2814,12 @@ def _field_widget(
         if allows_custom:
             values.append(OTHER_OPTION)
         state_value = st.session_state.get(key)
+        if state_value not in (None, ""):
+            normalized_state_value = _normalize_select_option_value(option_key, state_value)
+            if normalized_state_value != state_value:
+                state_value = normalized_state_value
+                st.session_state[key] = state_value
+                _ensure_group_draft(group_index)[field] = state_value
         if state_value not in (None, "") and state_value not in values:
             insert_at = max(1, len(values) - (0 if not allows_custom else 1))
             if option_key not in STRICT_SELECT_OPTION_KEYS and _is_allowed_select_value(option_key, str(state_value), field):
@@ -2918,11 +2927,25 @@ def _select_values(options: OptionsManager, option_key: str, field: str | None =
 
 
 def _normalize_select_option_value(option_key: str | None, value: Any) -> str:
+    if option_key == "group_operation":
+        return _normalize_group_operation(value) or ""
     if option_key == "shaft_material":
         return _normalize_shaft_material(value) or ""
     if option_key == "seismic":
         return _normalize_seismic(value) or ""
     return str(value)
+
+
+def _normalize_group_operation(value: Any) -> str | None:
+    if value in ("", None, OTHER_OPTION):
+        return None
+    text = str(value).strip()
+    normalized = text.casefold()
+    if normalized in {"одиночное", "одиночная"}:
+        return "Одиночная"
+    if normalized in {"групповое", "групповая"}:
+        return "Групповая"
+    return text
 
 
 def _normalize_shaft_material(value: Any) -> str | None:
@@ -3665,6 +3688,8 @@ def _drop_empty(data: dict[str, Any]) -> dict[str, Any]:
 
 def _prepare_group_for_model(data: dict[str, Any]) -> dict[str, Any]:
     group = dict(data)
+    if group.get("group_operation") not in ("", None):
+        group["group_operation"] = _normalize_group_operation(group["group_operation"])
     if not _has_machine_room(group.get("machine_room")):
         group.pop(MACHINE_ROOM_HEIGHT_FIELD, None)
     _apply_paired_finish_fields(group, SIGNAL_FINISH_FIELDS)
