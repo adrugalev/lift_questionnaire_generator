@@ -910,6 +910,75 @@ def test_draft_payload_serializes_current_form_state(monkeypatch) -> None:
     app.json.dumps(payload, ensure_ascii=False)
 
 
+def test_draft_payload_digest_ignores_save_metadata() -> None:
+    payload = {
+        "type": app.DRAFT_FILE_KIND,
+        "schema_version": app.DRAFT_SCHEMA_VERSION,
+        "saved_at": "2026-09-14",
+        "app_version": "Версия 2 от 14.09.2026",
+        "project": {"project_name": "Бизнес-центр Орбита"},
+        "groups": [{"lift_name": "Л1"}],
+    }
+    updated_metadata = {
+        **payload,
+        "saved_at": "2026-09-15",
+        "app_version": "Версия 3 от 15.09.2026",
+    }
+
+    assert app._draft_payload_digest(payload) == app._draft_payload_digest(updated_metadata)
+
+
+def test_browser_autosave_candidate_reads_valid_draft_record() -> None:
+    payload = {
+        "type": app.DRAFT_FILE_KIND,
+        "schema_version": app.DRAFT_SCHEMA_VERSION,
+        "project": {"project_name": "Бизнес-центр Орбита"},
+        "groups": [{"lift_name": "Л1"}, {"lift_name": "Л2"}],
+    }
+
+    candidate = app._browser_autosave_candidate({
+        "status": "found",
+        "record": {
+            "saved_label": "14.09.2026, 10:30",
+            "payload": payload,
+        },
+    })
+
+    assert candidate == {
+        "payload": payload,
+        "saved_label": "14.09.2026, 10:30",
+        "project_name": "Бизнес-центр Орбита",
+        "group_count": 2,
+    }
+
+
+def test_browser_autosave_loads_first_and_saves_after_a_change(monkeypatch) -> None:
+    component_calls: list[dict[str, object]] = []
+    session_state = FakeSessionState({
+        "active_group_index": 0,
+        "browser_autosave_checked": False,
+        "browser_autosave_empty_digest": None,
+        "browser_autosave_clear_revision": 0,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(
+        app,
+        "BROWSER_DRAFT_STORAGE_COMPONENT",
+        lambda **kwargs: component_calls.append(kwargs),
+    )
+
+    app._sync_browser_autosave({}, [{}])
+
+    assert component_calls[-1]["data"]["command"] == "load"
+    session_state[app.BROWSER_DRAFT_COMPONENT_KEY] = {"loaded_record": {"status": "empty"}}
+    app._process_browser_autosave_restore()
+    app._sync_browser_autosave({"project_name": "Бизнес-центр Орбита"}, [{}])
+
+    assert session_state["browser_autosave_checked"] is True
+    assert component_calls[-1]["data"]["command"] == "save"
+    assert component_calls[-1]["data"]["payload"]["project"]["project_name"] == "Бизнес-центр Орбита"
+
+
 def test_apply_draft_payload_restores_project_groups_and_widgets(monkeypatch) -> None:
     session_state = FakeSessionState({
         "group_count": 1,

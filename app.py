@@ -32,6 +32,64 @@ GROUP_NAVIGATOR_COMPONENT = components.declare_component(
     "group_navigator",
     path=str(ROOT / "components" / "group_navigator"),
 )
+BROWSER_DRAFT_STORAGE_KEY = "epss_lift_questionnaire_autosave_v1"
+BROWSER_DRAFT_COMPONENT_KEY = "browser_draft_storage"
+BROWSER_DRAFT_STORAGE_COMPONENT = st.components.v2.component(
+    "browser_draft_storage",
+    html='<span data-browser-draft-storage aria-hidden="true" style="display:none"></span>',
+    js="""
+    export default function(component) {
+        const { data, parentElement, setStateValue } = component;
+        const marker = parentElement.querySelector('[data-browser-draft-storage]');
+        if (!marker || !data) return;
+
+        const requestId = String(data.request_id ?? '');
+        if (marker.dataset.requestId === requestId) return;
+        marker.dataset.requestId = requestId;
+
+        try {
+            if (data.command === 'load') {
+                const raw = window.localStorage.getItem(data.storage_key);
+                if (!raw) {
+                    setStateValue('loaded_record', { status: 'empty' });
+                    return;
+                }
+                try {
+                    setStateValue('loaded_record', {
+                        status: 'found',
+                        record: JSON.parse(raw),
+                    });
+                } catch (_error) {
+                    setStateValue('loaded_record', { status: 'invalid' });
+                }
+                return;
+            }
+
+            if (data.command === 'save') {
+                const now = new Date();
+                const savedLabel = new Intl.DateTimeFormat('ru-RU', {
+                    dateStyle: 'short',
+                    timeStyle: 'short',
+                }).format(now);
+                window.localStorage.setItem(data.storage_key, JSON.stringify({
+                    saved_at: now.toISOString(),
+                    saved_label: savedLabel,
+                    payload: data.payload,
+                }));
+                return;
+            }
+
+            if (data.command === 'clear') {
+                window.localStorage.removeItem(data.storage_key);
+            }
+        } catch (_error) {
+            if (data.command === 'load') {
+                setStateValue('loaded_record', { status: 'unavailable' });
+            }
+        }
+    }
+    """,
+)
 DEFAULT_TEMPLATE = ROOT / "templates" / "questionnaire_template.xlsx"
 MAPPING_PATH = ROOT / "data" / "excel_mapping.json"
 OPTIONS_PATH = ROOT / "data" / "options.json"
@@ -649,6 +707,7 @@ def main() -> None:
     options = _options_manager()
     _init_state()
     _apply_pending_draft_restore()
+    _process_browser_autosave_restore()
     _render_app_header(options)
 
     _render_lift_team_sidebar()
@@ -657,6 +716,7 @@ def main() -> None:
     project_data = _project_block()
     group_data = _groups_block(options)
     _draft_sidebar(project_data, group_data)
+    _sync_browser_autosave(project_data, group_data)
 
     questionnaire = _build_questionnaire(project_data, group_data)
     if questionnaire:
@@ -1443,6 +1503,9 @@ def _init_state() -> None:
     st.session_state.setdefault("active_group_index", 0)
     st.session_state.setdefault("group_section_widget_revision", 0)
     st.session_state.setdefault("draft_upload_revision", 0)
+    st.session_state.setdefault("browser_autosave_checked", False)
+    st.session_state.setdefault("browser_autosave_empty_digest", None)
+    st.session_state.setdefault("browser_autosave_clear_revision", 0)
 
 
 def _render_project_summary_sidebar() -> None:
@@ -1524,13 +1587,18 @@ def _apply_pending_draft_restore() -> None:
     payload = st.session_state.pop("pending_draft_payload", None)
     if payload is None:
         return
+    restored_notice = st.session_state.pop(
+        "pending_draft_notice",
+        "Черновик загружен. Можно продолжать заполнение.",
+    )
     try:
         _apply_draft_payload(payload)
     except (ValueError, TypeError) as exc:
         st.session_state.draft_restore_error = f"Не удалось загрузить черновик: {exc}"
         _reset_draft_uploader()
         return
-    st.session_state.draft_restore_notice = "Черновик загружен. Можно продолжать заполнение."
+    if restored_notice:
+        st.session_state.draft_restore_notice = restored_notice
     _reset_draft_uploader()
 
 
@@ -1556,6 +1624,163 @@ def _draft_payload(project_data: dict[str, Any], group_data: list[dict[str, Any]
         "active_group_index": int(st.session_state.get("active_group_index", 0) or 0),
         "active_sections": active_sections,
     }
+
+
+def _draft_payload_digest(payload: dict[str, Any]) -> str:
+    content = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"saved_at", "app_version"}
+    }
+    serialized = json.dumps(content, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+def _browser_autosave_loaded_record() -> dict[str, Any] | None:
+    component_state = st.session_state.get(BROWSER_DRAFT_COMPONENT_KEY)
+    if not isinstance(component_state, dict):
+        return None
+    loaded_record = component_state.get("loaded_record")
+    return loaded_record if isinstance(loaded_record, dict) else None
+
+
+def _browser_autosave_candidate(loaded_record: dict[str, Any]) -> dict[str, Any] | None:
+    if loaded_record.get("status") != "found":
+        return None
+    record = loaded_record.get("record")
+    if not isinstance(record, dict):
+        return None
+    payload = record.get("payload")
+    if not isinstance(payload, dict) or payload.get("type") != DRAFT_FILE_KIND:
+        return None
+    try:
+        schema_version = int(payload.get("schema_version", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    if schema_version > DRAFT_SCHEMA_VERSION:
+        return None
+    project = payload.get("project")
+    groups = payload.get("groups")
+    if not isinstance(project, dict) or not isinstance(groups, list):
+        return None
+    return {
+        "payload": payload,
+        "saved_label": str(record.get("saved_label") or payload.get("saved_at") or "").strip(),
+        "project_name": str(project.get("project_name") or "").strip(),
+        "group_count": len(groups),
+    }
+
+
+def _process_browser_autosave_restore() -> None:
+    if st.session_state.get("browser_autosave_checked"):
+        return
+    loaded_record = _browser_autosave_loaded_record()
+    if loaded_record is None:
+        return
+
+    status = loaded_record.get("status")
+    if status == "empty":
+        st.session_state.browser_autosave_checked = True
+        return
+    if status == "unavailable":
+        st.session_state.browser_autosave_checked = True
+        st.session_state.draft_restore_error = (
+            "Автосохранение недоступно в этом браузере. Ручной черновик продолжает работать."
+        )
+        return
+
+    candidate = _browser_autosave_candidate(loaded_record)
+    if candidate is None:
+        st.session_state.browser_autosave_checked = True
+        st.session_state.browser_autosave_clear_pending = True
+        st.session_state.draft_restore_error = "Повреждённое автосохранение удалено."
+        return
+
+    st.session_state.browser_autosave_candidate = candidate
+    _browser_autosave_restore_dialog(candidate)
+
+
+@st.dialog("Продолжить заполнение?")
+def _browser_autosave_restore_dialog(candidate: dict[str, Any]) -> None:
+    st.write("В этом браузере найден незавершённый проект.")
+    project_name = candidate.get("project_name")
+    if project_name:
+        st.markdown(f"**{project_name}**")
+    group_count = int(candidate.get("group_count", 0) or 0)
+    if group_count:
+        st.caption(f"Позиций в проекте: {group_count}")
+    saved_label = candidate.get("saved_label")
+    if saved_label:
+        st.caption(f"Последнее автосохранение: {saved_label}")
+
+    continue_column, restart_column = st.columns(2)
+    with continue_column:
+        if st.button("Продолжить заполнение", type="primary", use_container_width=True):
+            st.session_state.pending_draft_payload = candidate["payload"]
+            st.session_state.pending_draft_notice = "Автосохранение восстановлено. Можно продолжать заполнение."
+            st.session_state.browser_autosave_checked = True
+            st.session_state.pop("browser_autosave_candidate", None)
+            st.rerun()
+    with restart_column:
+        if st.button("Начать заново", use_container_width=True):
+            st.session_state.pending_draft_payload = _empty_draft_payload()
+            st.session_state.pending_draft_notice = ""
+            st.session_state.browser_autosave_checked = True
+            st.session_state.browser_autosave_clear_pending = True
+            st.session_state.pop("browser_autosave_candidate", None)
+            st.rerun()
+
+
+def _empty_draft_payload() -> dict[str, Any]:
+    return {
+        "type": DRAFT_FILE_KIND,
+        "schema_version": DRAFT_SCHEMA_VERSION,
+        "project": {},
+        "groups": [{}],
+        "active_group_index": 0,
+        "active_sections": {},
+    }
+
+
+def _on_browser_autosave_loaded_record_change() -> None:
+    return None
+
+
+def _sync_browser_autosave(project_data: dict[str, Any], group_data: list[dict[str, Any]]) -> None:
+    payload = _draft_payload(project_data, group_data)
+    digest = _draft_payload_digest(payload)
+    if st.session_state.get("browser_autosave_empty_digest") is None:
+        st.session_state.browser_autosave_empty_digest = digest
+
+    loaded_record = _browser_autosave_loaded_record()
+    component_data: dict[str, Any] = {
+        "storage_key": BROWSER_DRAFT_STORAGE_KEY,
+        "command": "idle",
+        "request_id": "idle",
+    }
+    if not st.session_state.get("browser_autosave_checked"):
+        if loaded_record is None:
+            component_data.update(command="load", request_id="load")
+    elif st.session_state.pop("browser_autosave_clear_pending", False):
+        revision = int(st.session_state.get("browser_autosave_clear_revision", 0) or 0) + 1
+        st.session_state.browser_autosave_clear_revision = revision
+        component_data.update(command="clear", request_id=f"clear:{revision}")
+    elif digest == st.session_state.get("browser_autosave_empty_digest"):
+        component_data.update(command="clear", request_id=f"clear:empty:{digest}")
+    else:
+        component_data.update(
+            command="save",
+            request_id=f"save:{digest}",
+            payload=payload,
+        )
+
+    BROWSER_DRAFT_STORAGE_COMPONENT(
+        data=component_data,
+        default={"loaded_record": None},
+        key=BROWSER_DRAFT_COMPONENT_KEY,
+        on_loaded_record_change=_on_browser_autosave_loaded_record_change,
+        height=0,
+    )
 
 
 def _deferred_draft_content(
