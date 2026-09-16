@@ -80,7 +80,7 @@ def test_table_like_lift_sheet_detection():
     assert first.cabin_type == "Непроходная"
     assert second.doors_count == 10
     assert second.stops == 10
-    assert first.group_operation == "Одиночное"
+    assert first.group_operation == "Одиночная"
     assert first.shaft_material == "Железобетон"
     assert first.fire_resistance == "EI-60"
     assert first.pit_depth_mm == 1150

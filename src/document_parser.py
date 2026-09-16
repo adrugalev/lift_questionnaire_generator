@@ -709,8 +709,8 @@ def _group_operation(value: str) -> str:
     if "dds" in value_norm:
         return "DDS"
     if "груп" in value_norm:
-        return "Групповое"
-    return "Одиночное"
+        return "Групповая"
+    return "Одиночная"
 
 
 def _fire_resistance(value: str) -> str | None:
