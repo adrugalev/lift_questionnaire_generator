@@ -129,26 +129,129 @@
       background: #2f67e8;
       color: #fff;
     }
+
+    #context-menu {
+      position: absolute;
+      z-index: 1100;
+      width: min(310px, calc(100% - 12px));
+      padding: 6px;
+      border: 1px solid #d7e1ef;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 6px 18px rgba(21, 79, 158, 0.18);
+    }
+    #context-menu[hidden] { display: none; }
+    .menu-title {
+      padding: 6px 10px 8px;
+      color: #65758b;
+      font-size: 13px;
+      overflow-wrap: anywhere;
+    }
+    #context-menu button {
+      display: block;
+      width: 100%;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      padding: 10px;
+      color: #154f9e;
+      font: 14px/1.3 "Source Sans Pro", sans-serif;
+      text-align: left;
+      cursor: pointer;
+    }
+    #context-menu button:hover, #context-menu button:focus-visible {
+      background: #edf5ff;
+      outline: 2px solid #83b6ff;
+      outline-offset: -2px;
+    }
+    #context-menu button[data-action="delete"] { color: #b42318; }
   </style>
 </head>
 <body>
   <div id="navigator" aria-label="Навигация по группам лифтов"></div>
+  <div id="context-menu" role="menu" aria-label="Действия с лифтом" hidden>
+    <div class="menu-title" id="menu-title"></div>
+    <button type="button" role="menuitem" data-action="copy">Копировать лифт</button>
+    <button type="button" role="menuitem" data-action="copy_finishes">Отделки и опции → в новый лифт</button>
+    <button type="button" role="menuitem" data-action="delete">Удалить лифт</button>
+  </div>
   <script>
     const navigatorElement = document.getElementById("navigator");
+    const contextMenu = document.getElementById("context-menu");
+    let menuTarget = null;
     let currentArgs = {items: [], active_id: "0"};
     let draggedElement = null;
     let pointerDrag = null;
     let dragOccurred = false;
     let eventCounter = 0;
+    let renderedArgs = null;
+    let frameHeight = 0;
 
     function sendStreamlitMessage(type, payload = {}) {
       window.parent.postMessage({isStreamlitMessage: true, type, ...payload}, "*");
     }
 
     function setFrameHeight() {
-      const height = Math.max(1, Math.ceil(document.documentElement.scrollHeight));
-      sendStreamlitMessage("streamlit:setFrameHeight", {height});
+      const menuBottom = contextMenu.hidden ? 0 : contextMenu.offsetTop + contextMenu.offsetHeight + 12;
+      const height = Math.max(1, Math.ceil(navigatorElement.getBoundingClientRect().bottom), menuBottom);
+      if (height !== frameHeight) {
+        frameHeight = height;
+        sendStreamlitMessage("streamlit:setFrameHeight", {height});
+      }
     }
+
+    function closeMenu(restoreFocus = false) {
+      const target = menuTarget;
+      contextMenu.hidden = true;
+      menuTarget = null;
+      target?.setAttribute("aria-expanded", "false");
+      if (restoreFocus) target?.focus();
+      setFrameHeight();
+    }
+
+    function openMenu(element, x, y) {
+      closeMenu();
+      menuTarget = element;
+      dragOccurred = false;
+      document.getElementById("menu-title").textContent = element.textContent;
+      contextMenu.hidden = false;
+      contextMenu.style.left = `${Math.max(6, Math.min(x, document.documentElement.clientWidth - contextMenu.offsetWidth - 6))}px`;
+      contextMenu.style.top = `${Math.max(4, y)}px`;
+      element.setAttribute("aria-expanded", "true");
+      setFrameHeight();
+      contextMenu.querySelector("button").focus({preventScroll: true});
+    }
+
+    contextMenu.addEventListener("click", event => {
+      const button = event.target.closest("button[data-action]");
+      if (!button || !menuTarget) return;
+      const targetId = menuTarget.dataset.id;
+      closeMenu(true);
+      setComponentValue({action: button.dataset.action, target_id: targetId, event_id: nextEventId()});
+    });
+    contextMenu.addEventListener("keydown", event => {
+      const buttons = [...contextMenu.querySelectorAll("button")];
+      const index = buttons.indexOf(document.activeElement);
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
+          : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+        buttons[next].focus();
+      }
+      if (event.key === "Escape" || event.key === "Tab") {
+        if (event.key === "Escape") event.preventDefault();
+        closeMenu(true);
+      }
+    });
+    window.addEventListener("pointerdown", event => {
+      if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeMenu();
+    });
+    window.addEventListener("blur", () => closeMenu());
+    let frameWidth = window.innerWidth;
+    window.addEventListener("resize", () => {
+      if (window.innerWidth !== frameWidth) closeMenu();
+      frameWidth = window.innerWidth;
+    });
 
     function setComponentValue(value) {
       sendStreamlitMessage("streamlit:setComponentValue", {value, dataType: "json"});
@@ -252,7 +355,13 @@
       navigatorElement.insertBefore(pointerDrag.placeholder, lastInRow.nextSibling);
     }
 
-    function render(args) {
+    function render(args, force = false) {
+      const signature = JSON.stringify(args || currentArgs);
+      // Streamlit also sends render messages after the iframe height changes.
+      // Keep an open menu (and an active drag) intact when its data is unchanged.
+      if (!force && signature === renderedArgs) return;
+      renderedArgs = signature;
+      closeMenu();
       currentArgs = args || currentArgs;
       navigatorElement.replaceChildren();
       const items = Array.isArray(currentArgs.items) ? currentArgs.items : [];
@@ -265,7 +374,21 @@
         element.dataset.id = String(item.id);
         element.draggable = false;
         element.textContent = String(item.label || "");
-        element.title = "Нажмите для открытия или перетащите, чтобы изменить порядок";
+        element.title = "Нажмите для открытия; правый клик — действия с лифтом; перетащите для изменения порядка";
+        element.setAttribute("aria-haspopup", "menu");
+        element.setAttribute("aria-expanded", "false");
+        element.addEventListener("contextmenu", event => {
+          event.preventDefault();
+          if (pointerDrag?.moved) return;
+          openMenu(element, event.clientX, event.clientY);
+        });
+        element.addEventListener("keydown", event => {
+          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+            event.preventDefault();
+            const rect = element.getBoundingClientRect();
+            openMenu(element, rect.left, rect.bottom);
+          }
+        });
         element.setAttribute("aria-pressed", String(item.id) === activeId ? "true" : "false");
         if (String(item.id) === activeId) {
           element.classList.add("active");
@@ -330,7 +453,7 @@
       draggedElement = null;
       pointerDrag = null;
       dragOccurred = false;
-      render(currentArgs);
+      render(currentArgs, true);
     });
 
     window.addEventListener("message", event => {

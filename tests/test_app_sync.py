@@ -1,5 +1,6 @@
 import base64
 import json
+import pytest
 from io import BytesIO
 
 import app
@@ -18,6 +19,52 @@ class FakeSessionState(dict):
 
     def __setattr__(self, name, value):
         self[name] = value
+
+
+@pytest.mark.parametrize("action", ["copy", "copy_finishes", "delete"])
+def test_context_action_targets_clicked_group_once(monkeypatch, action) -> None:
+    state = FakeSessionState(
+        group_count=2, active_group_index=0,
+        prefill_groups=[{"lift_name": "Л1", "quantity": 1, "section": "A"},
+                        {"lift_name": "Л2", "quantity": 1, "section": "B", "capacity_kg": 1000,
+                         "side_wall_finish": "EX-HS01", "option_ard": "ДА"}],
+        group_drafts=[{}, {}], extracted_group_fields=[set(), {"capacity_kg", "side_wall_finish"}],
+    )
+    monkeypatch.setattr(app.st, "session_state", state)
+    reruns = []
+    monkeypatch.setattr(app.st, "rerun", lambda: reruns.append(True))
+    event = {"action": action, "target_id": "1", "event_id": "context-1"}
+    app._handle_group_navigation_event(event)
+    app._handle_group_navigation_event(event)
+    assert len(reruns) == 1
+    assert state.group_drafts[0]["section"] == "A"
+    if action == "delete":
+        assert state.group_count == 1
+        assert state.active_group_index == 0
+    else:
+        assert state.group_count == 3
+        assert state.active_group_index == 2
+        target = state.group_drafts[2]
+        assert target["side_wall_finish"] == state.group_drafts[1]["side_wall_finish"]
+        assert "EX-HS01" in target["side_wall_finish"]
+        assert app._truthy_yes_no(target["option_ard"])
+        assert target["lift_name"] == "Л3"
+        assert state.group_drafts[1]["capacity_kg"] == 1000
+        if action == "copy_finishes":
+            assert not {"capacity_kg", "quantity", "section"} & target.keys()
+            assert state.extracted_group_fields[2] == {"side_wall_finish"}
+        else:
+            assert target["capacity_kg"] == 1000
+            assert target["section"] == "B"
+
+
+@pytest.mark.parametrize("target", [None, "bad", "-1", "2"])
+def test_context_action_rejects_invalid_target(monkeypatch, target) -> None:
+    state = FakeSessionState(group_count=2, active_group_index=0)
+    monkeypatch.setattr(app.st, "session_state", state)
+    monkeypatch.setattr(app, "_copy_group", lambda *args, **kwargs: pytest.fail("Invalid target copied"))
+    app._handle_group_navigation_event({"action": "copy", "target_id": target, "event_id": "invalid"})
+    assert state.group_count == 2
 
 
 def test_syncable_fields_exclude_geometry_and_core_specs() -> None:

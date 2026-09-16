@@ -2285,7 +2285,7 @@ def _add_group() -> None:
     _activate_group(new_index)
 
 
-def _copy_group(index: int) -> None:
+def _copy_group(index: int, *, finishes_only: bool = False) -> None:
     _normalize_group_lists()
     if index < 0 or index >= st.session_state.group_count:
         return
@@ -2296,6 +2296,11 @@ def _copy_group(index: int) -> None:
     ]
     copy_index = len(current_groups)
     copied_group = dict(current_groups[index])
+    if finishes_only:
+        copied_group = {
+            field: value for field, value in copied_group.items()
+            if field in SYNCABLE_GROUP_FIELDS and value not in ("", None, OTHER_OPTION)
+        }
     last_group = current_groups[-1]
     next_lift_name = _next_group_lift_name(last_group.get("lift_name"), last_group.get("quantity"))
     if next_lift_name:
@@ -2303,6 +2308,8 @@ def _copy_group(index: int) -> None:
     current_groups.append(copied_group)
 
     extracted_fields = set(st.session_state.extracted_group_fields[index])
+    if finishes_only:
+        extracted_fields.intersection_update(SYNCABLE_GROUP_FIELDS)
     st.session_state.extracted_group_fields.append(extracted_fields)
     prefill_groups = [dict(group) for group in st.session_state.prefill_groups]
     prefill_groups.append({})
@@ -2454,6 +2461,18 @@ def _handle_group_navigation_event(event: Any) -> None:
     st.session_state.group_navigation_event_id = event_id
 
     action = event.get("action")
+    if action in {"copy", "delete", "copy_finishes"}:
+        target = _delete_group_index_value(event.get("target_id"))
+        if target is None or target < 0 or target >= st.session_state.group_count:
+            return
+        if action == "delete":
+            _delete_group(target)
+            _clamp_active_group_selection()
+        else:
+            _copy_group(target, finishes_only=action == "copy_finishes")
+        st.rerun()
+        return
+
     if action == "select":
         selected = _delete_group_index_value(event.get("selected_id"))
         if selected is None or selected < 0 or selected >= st.session_state.group_count:
