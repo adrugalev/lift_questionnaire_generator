@@ -891,32 +891,49 @@ def _filled_field_styles_css() -> str:
             color: #b08a64 !important;
         }
 
-        div[data-testid="stElementContainer"]:has(.management-button-marker) {
-            height: 0 !important;
-            margin: 0 !important;
-            overflow: hidden !important;
+        .st-key-lift_management {
+            container-type: inline-size;
+            container-name: lift-actions;
         }
 
-        div[data-testid="stElementContainer"]:has(.management-button-marker)
-            + div[data-testid="stElementContainer"] {
-            margin-top: -0.75rem !important;
+        .st-key-lift_management div[data-testid="stHorizontalBlock"] {
+            display: grid !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.5rem !important;
+            align-items: stretch !important;
         }
 
-        div[data-testid="stElementContainer"]:has(.management-button-marker)
-            + div[data-testid="stElementContainer"] div[data-testid="stButton"] button {
+        @container lift-actions (max-width: 58rem) {
+            .st-key-lift_management div[data-testid="stHorizontalBlock"] {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @container lift-actions (max-width: 30rem) {
+            .st-key-lift_management div[data-testid="stHorizontalBlock"] {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+
+        .st-key-lift_management div[data-testid="stColumn"] {
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+
+        .st-key-lift_management div[data-testid="stButton"] button {
             align-items: center !important;
             display: flex !important;
             justify-content: center !important;
-            min-height: 2.3rem !important;
-            height: 2.3rem !important;
-            padding: 0.2rem 0.65rem !important;
+            min-height: 2.5rem !important;
+            height: auto !important;
+            padding: 0.5rem 0.65rem !important;
         }
 
-        div[data-testid="stElementContainer"]:has(.management-button-marker)
-            + div[data-testid="stElementContainer"] div[data-testid="stButton"] button p {
+        .st-key-lift_management div[data-testid="stButton"] button p {
             font-size: 0.9rem !important;
-            line-height: 1.05 !important;
-            white-space: nowrap !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            overflow-wrap: anywhere !important;
         }
 
         div[data-testid="stElementContainer"]:has(.group-nav-button-marker) {
@@ -1913,37 +1930,35 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     _sync_group_lift_name_ranges_before_render()
     _clamp_active_group_selection()
 
-    header_cols = st.columns([1.35, 2.35, 2.15, 4.15])
-    with header_cols[0]:
-        st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
-        if st.button("Добавить лифт", use_container_width=True):
-            _add_group()
-            st.rerun()
-    with header_cols[1]:
-        st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
-        if st.button("Копировать выбранный лифт", use_container_width=True):
-            _copy_group(int(st.session_state.active_group_index))
-            st.rerun()
-    with header_cols[2]:
-        st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
-        if st.button("Удалить выбранный лифт", use_container_width=True):
-            _delete_group(int(st.session_state.active_group_index))
-            st.rerun()
-    with header_cols[3]:
-        st.markdown('<span class="management-button-marker"></span>', unsafe_allow_html=True)
-        if st.button(
-            "Перенести отделки и опции из выбранного лифта",
-            disabled=st.session_state.group_count <= 1,
-            use_container_width=True,
-        ):
-            source_index = int(st.session_state.active_group_index)
-            source_label = _group_display_label(source_index)
-            _sync_common_fields_from_selected_group(source_index)
-            st.session_state.group_sync_notice = (
-                f"Отделки и опции перенесены из лифта «{source_label}» "
-                f"в остальные лифты ({st.session_state.group_count - 1})."
-            )
-            st.rerun()
+    with st.container(key="lift_management"):
+        header_cols = st.columns(4, gap="small")
+        with header_cols[0]:
+            if st.button("Добавить лифт", use_container_width=True):
+                _add_group()
+                st.rerun()
+        with header_cols[1]:
+            if st.button("Копировать лифт", help="Создать копию выбранного лифта", use_container_width=True):
+                _copy_group(int(st.session_state.active_group_index))
+                st.rerun()
+        with header_cols[2]:
+            if st.button("Удалить лифт", help="Удалить выбранный лифт", use_container_width=True):
+                _delete_group(int(st.session_state.active_group_index))
+                st.rerun()
+        with header_cols[3]:
+            if st.button(
+                "Перенести отделки и опции",
+                help="Перенести отделки и опции выбранного лифта во все остальные лифты",
+                disabled=st.session_state.group_count <= 1,
+                use_container_width=True,
+            ):
+                source_index = int(st.session_state.active_group_index)
+                source_label = _group_display_label(source_index)
+                _sync_common_fields_from_selected_group(source_index)
+                st.session_state.group_sync_notice = (
+                    f"Отделки и опции перенесены из лифта «{source_label}» "
+                    f"в остальные лифты ({st.session_state.group_count - 1})."
+                )
+                st.rerun()
 
     nav_groups = [_collect_group_from_state(index, _group_defaults(index)) for index in range(st.session_state.group_count)]
     _render_group_navigation(nav_groups)
