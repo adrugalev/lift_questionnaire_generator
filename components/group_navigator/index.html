@@ -130,18 +130,22 @@
       color: #fff;
     }
 
+  </style>
+  <style id="context-menu-styles">
     #context-menu {
-      position: absolute;
-      z-index: 1100;
+      box-sizing: border-box;
+      position: fixed;
+      z-index: 1000000;
       width: min(310px, calc(100% - 12px));
       padding: 6px;
       border: 1px solid #d7e1ef;
       border-radius: 10px;
       background: #fff;
       box-shadow: 0 6px 18px rgba(21, 79, 158, 0.18);
+      font-family: "Source Sans Pro", sans-serif;
     }
     #context-menu[hidden] { display: none; }
-    .menu-title {
+    #context-menu .menu-title {
       padding: 6px 10px 8px;
       color: #65758b;
       font-size: 13px;
@@ -178,6 +182,15 @@
   <script>
     const navigatorElement = document.getElementById("navigator");
     const contextMenu = document.getElementById("context-menu");
+    // A menu inside the iframe is clipped to its bounds. Mount it on the
+    // Streamlit page so it can overlap the form without resizing the iframe.
+    const menuDocument = window.parent.document;
+    const menuStyles = document.getElementById("context-menu-styles").cloneNode(true);
+    menuDocument.getElementById("context-menu")?.remove();
+    menuDocument.getElementById("context-menu-styles")?.remove();
+    menuDocument.head.appendChild(menuStyles);
+    menuDocument.body.appendChild(contextMenu);
+    const menuListeners = new AbortController();
     let menuTarget = null;
     let currentArgs = {items: [], active_id: "0"};
     let draggedElement = null;
@@ -192,8 +205,7 @@
     }
 
     function setFrameHeight() {
-      const menuBottom = contextMenu.hidden ? 0 : contextMenu.offsetTop + contextMenu.offsetHeight + 12;
-      const height = Math.max(1, Math.ceil(navigatorElement.getBoundingClientRect().bottom), menuBottom);
+      const height = Math.max(1, Math.ceil(navigatorElement.getBoundingClientRect().bottom));
       if (height !== frameHeight) {
         frameHeight = height;
         sendStreamlitMessage("streamlit:setFrameHeight", {height});
@@ -205,20 +217,20 @@
       contextMenu.hidden = true;
       menuTarget = null;
       target?.setAttribute("aria-expanded", "false");
-      if (restoreFocus) target?.focus();
-      setFrameHeight();
+      if (restoreFocus) target?.focus({preventScroll: true});
     }
 
     function openMenu(element, x, y) {
       closeMenu();
       menuTarget = element;
       dragOccurred = false;
-      document.getElementById("menu-title").textContent = element.textContent;
+      contextMenu.querySelector("#menu-title").textContent = element.textContent;
       contextMenu.hidden = false;
-      contextMenu.style.left = `${Math.max(6, Math.min(x, document.documentElement.clientWidth - contextMenu.offsetWidth - 6))}px`;
-      contextMenu.style.top = `${Math.max(4, y)}px`;
+      const frame = window.frameElement.getBoundingClientRect();
+      const viewport = menuDocument.documentElement;
+      contextMenu.style.left = `${Math.max(6, Math.min(frame.left + x, viewport.clientWidth - contextMenu.offsetWidth - 6))}px`;
+      contextMenu.style.top = `${Math.max(6, Math.min(frame.top + y, viewport.clientHeight - contextMenu.offsetHeight - 6))}px`;
       element.setAttribute("aria-expanded", "true");
-      setFrameHeight();
       contextMenu.querySelector("button").focus({preventScroll: true});
     }
 
@@ -231,7 +243,7 @@
     });
     contextMenu.addEventListener("keydown", event => {
       const buttons = [...contextMenu.querySelectorAll("button")];
-      const index = buttons.indexOf(document.activeElement);
+      const index = buttons.indexOf(menuDocument.activeElement);
       if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
         event.preventDefault();
         const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1
@@ -246,7 +258,20 @@
     window.addEventListener("pointerdown", event => {
       if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeMenu();
     });
-    window.addEventListener("blur", () => closeMenu());
+    menuDocument.addEventListener("pointerdown", event => {
+      if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeMenu();
+    }, {signal: menuListeners.signal});
+    menuDocument.addEventListener("focusin", event => {
+      if (!contextMenu.hidden && !contextMenu.contains(event.target)) closeMenu();
+    }, {signal: menuListeners.signal});
+    menuDocument.addEventListener("scroll", () => closeMenu(), {capture: true, signal: menuListeners.signal});
+    window.parent.addEventListener("resize", () => closeMenu(), {signal: menuListeners.signal});
+    window.parent.addEventListener("blur", () => closeMenu(), {signal: menuListeners.signal});
+    window.addEventListener("pagehide", () => {
+      menuListeners.abort();
+      contextMenu.remove();
+      menuStyles.remove();
+    });
     let frameWidth = window.innerWidth;
     window.addEventListener("resize", () => {
       if (window.innerWidth !== frameWidth) closeMenu();
