@@ -1135,7 +1135,7 @@ def test_lift_team_surnames_match_reporting_documents_directory() -> None:
         "Другалёв",
         "Конопельнюк",
         "Платонов",
-        "Зимин",
+        "Ванчикова",
         "Попов",
     )
 
@@ -1224,6 +1224,7 @@ def test_lift_team_sidebar_selected_button_uses_explicit_green_style() -> None:
 
 def test_legacy_preparer_surname_is_normalized_for_sidebar() -> None:
     assert app._normalize_preparer_surname("Другалев") == "Другалёв"
+    assert app._normalize_preparer_surname("Зимин") == "Ванчикова"
 
 
 def test_lift_summary_breakdown_aggregates_matching_specs() -> None:

@@ -100,7 +100,7 @@ LIFT_TEAM_SURNAMES = (
     "Другалёв",
     "Конопельнюк",
     "Платонов",
-    "Зимин",
+    "Ванчикова",
     "Попов",
 )
 APP_DIR = Path(__file__).resolve().parent
@@ -1993,6 +1993,8 @@ def _normalize_preparer_surname(value: Any) -> str | None:
     surname = str(value or "").strip()
     if surname == "Другалев":
         surname = "Другалёв"
+    if surname == "Зимин":
+        surname = "Ванчикова"
     return surname if surname in LIFT_TEAM_SURNAMES else None
 
 
