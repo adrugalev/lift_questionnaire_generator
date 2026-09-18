@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-APP_VERSION_DATE = "17.09.2026"
+APP_VERSION_DATE = "18.09.2026"
 # Дневной счетчик версии: при смене APP_VERSION_DATE начинается с 1.
 APP_VERSION_REVISION = 1
 
@@ -16,6 +16,14 @@ class VersionHistoryEntry:
 
 
 APP_VERSION_HISTORY = (
+    VersionHistoryEntry(
+        revision=1,
+        date="18.09.2026",
+        changes=(
+            "Для проходной кабины добавлены восемь вариантов зеркал MEX-1–MEX-4 слева и справа с фотографиями.",
+            "Список зеркал и выбор по фото учитывают тип кабины; несовместимое зеркало сбрасывается при его смене.",
+        ),
+    ),
     VersionHistoryEntry(
         revision=1,
         date="17.09.2026",

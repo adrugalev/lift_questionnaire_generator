@@ -178,7 +178,7 @@ def test_random_test_groups_fill_every_form_field(monkeypatch) -> None:
         "lop_type": ["EX-JC99A"],
     }
 
-    def fake_select_values(options, option_key: str, field: str | None = None) -> list[str]:
+    def fake_select_values(options, option_key: str, field: str | None = None, *, cabin_type=None) -> list[str]:
         return values_by_key.get(option_key, [])
 
     monkeypatch.setattr(app, "_select_values", fake_select_values)
@@ -366,6 +366,56 @@ def test_mirror_image_option_label_uses_description() -> None:
     assert app._image_option_label(app.Path("MEX_2.png"), "mirror") == "MEX-2, в неполную ширину и неполную высоту"
     assert app._image_option_label(app.Path("MEX-3.png"), "mirror") == "MEX-3, во всю ширину стены до поручня"
     assert app._image_option_label(app.Path("MEX-4.png"), "mirror") == "MEX-4, во всю ширину стены до пола"
+
+
+def test_mirror_options_depend_on_cabin_type() -> None:
+    options = app.OptionsManager(app.OPTIONS_PATH)
+    regular = app._select_values(options, "mirror", cabin_type="Непроходная")
+    through = app._select_values(options, "mirror", cabin_type="Проходная")
+    assert len(regular) == 5  # Four rear-wall mirrors and "Нет".
+    assert len(through) == 9  # Four models on each side and "Нет".
+    assert set(regular) & set(through) == {"Нет"}
+    assert all(app._mirror_side(value) for value in through if value != "Нет")
+
+
+@pytest.mark.parametrize("article", ["MEX-1", "MEX-2", "MEX-3", "MEX-4"])
+@pytest.mark.parametrize("side", ["слева", "справа"])
+def test_through_mirror_keeps_side_and_resolves_correct_photo(article, side) -> None:
+    from src.excel_generator import _excel_image_path_for_value
+
+    value = f"{article}, {app.MIRROR_ARTICLE_DESCRIPTIONS[article]}, {side}"
+    assert app._storage_value_for_option("mirror", value) == value
+    path = app._image_path_for_value("mirror", value)
+    assert path is not None and path.name == f"{value}.jpg"
+    assert _excel_image_path_for_value("mirror", value) == path
+    with Image.open(path) as picture:
+        picture.verify()
+
+
+@pytest.mark.parametrize("cabin_type,mirror", [
+    ("Проходная", "MEX-1, в неполную ширину до поручня"),
+    ("Непроходная", "MEX-2, в неполную ширину и неполную высоту, справа"),
+])
+def test_changing_cabin_clears_incompatible_mirror_from_all_sources(monkeypatch, cabin_type, mirror) -> None:
+    state = FakeSessionState(
+        prefill_groups=[{"mirror": mirror}], group_drafts=[{"mirror": mirror}],
+        group_0_mirror=mirror, group_0_mirror_pending_choice=mirror, group_0_cabin_type=cabin_type,
+    )
+    monkeypatch.setattr(app.st, "session_state", state)
+    app._save_group_widget_value(0, "cabin_type", "group_0_cabin_type")
+    assert state.group_0_mirror == ""
+    assert "mirror" not in state.prefill_groups[0]
+    assert "mirror" not in state.group_drafts[0]
+    assert "group_0_mirror_pending_choice" not in state
+
+
+def test_changing_cabin_preserves_no_mirror_and_other_lifts(monkeypatch) -> None:
+    state = FakeSessionState(prefill_groups=[{}, {"mirror": "MEX-1"}],
+                             group_drafts=[{"mirror": "Нет"}, {}], group_0_cabin_type="Проходная")
+    monkeypatch.setattr(app.st, "session_state", state)
+    app._save_group_widget_value(0, "cabin_type", "group_0_cabin_type")
+    assert state.group_drafts[0]["mirror"] == "Нет"
+    assert state.prefill_groups[1]["mirror"] == "MEX-1"
 
 
 def test_image_options_are_read_from_material_folder(tmp_path, monkeypatch) -> None:
