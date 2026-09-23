@@ -204,6 +204,7 @@ MANUAL_OPTION_VALUES = {
 }
 MANUAL_FIELD_OPTION_VALUES = {
     "skirting_finish": ["Нет"],
+    "floor_indicator_type": ["НЕТ"],
 }
 EXCLUDED_SELECT_OPTION_VALUES = {
     "ceiling_type": {"Стандартный"},
@@ -368,6 +369,7 @@ DEFAULT_SHAFT_MATERIAL = "Железобетон"
 DEFAULT_SEISMIC = "НЕТ"
 DEFAULT_FIRE_RESISTANCE = "EI-60"
 DEFAULT_DOOR_MODEL = "NBSL"
+DEFAULT_FLOOR_INDICATOR_TYPE = "НЕТ"
 HELPER_GROUP_FIELDS = {"underground_floors"}
 HELPER_GROUP_FIELDS.update(ADDITIONAL_OPTION_TRANSLATIONS)
 SIGNAL_FINISH_FIELDS = {
@@ -518,7 +520,6 @@ WALL_LINKED_FINISH_FIELDS = (
     "cop_finish",
     "main_floor_lop_finish",
     "other_floors_lop_finish",
-    "floor_indicator_finish",
 )
 MGN_ACCESSIBILITY_FIELD = "mgn_accessibility"
 MGN_VOICE_OPTION_FIELD = "option_russian_voice"
@@ -2935,6 +2936,9 @@ def _group_defaults(index: int) -> dict[str, Any]:
     merged["seismic"] = _normalize_seismic(merged.get("seismic")) or DEFAULT_SEISMIC
     merged.setdefault("fire_resistance", DEFAULT_FIRE_RESISTANCE)
     merged.setdefault("door_model", DEFAULT_DOOR_MODEL)
+    merged.setdefault("floor_indicator_type", DEFAULT_FLOOR_INDICATOR_TYPE)
+    if _is_no_finish_required_value(merged.get("floor_indicator_type")):
+        merged.pop("floor_indicator_finish", None)
     return merged
 
 
@@ -3641,6 +3645,10 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
     if field == "underground_floors":
         stops_value = _stops_for_group(group_index, draft)
         _apply_stops_derived_fields(group_index, stops_value)
+    if field == "floor_indicator_type" and _is_no_finish_required_value(value):
+        finish_field = SIGNAL_FINISH_FIELDS[field]
+        draft.pop(finish_field, None)
+        st.session_state.pop(f"group_{group_index}_{finish_field}", None)
     if field in {"lift_name", "quantity"}:
         _sync_group_lift_name_range_in_state(group_index)
         _renumber_following_group_lift_names_in_state(group_index)
@@ -3953,6 +3961,9 @@ def _prepare_group_for_model(data: dict[str, Any]) -> dict[str, Any]:
         group["group_operation"] = _normalize_group_operation(group["group_operation"])
     if not _has_machine_room(group.get("machine_room")):
         group.pop(MACHINE_ROOM_HEIGHT_FIELD, None)
+    if _is_no_finish_required_value(group.get("floor_indicator_type")):
+        group.pop("floor_indicator_type", None)
+        group.pop("floor_indicator_finish", None)
     _apply_paired_finish_fields(group, SIGNAL_FINISH_FIELDS)
     _apply_paired_finish_fields(group, CABIN_COMPONENT_FINISH_FIELDS)
     _apply_mgn_option_dependency(group)

@@ -708,6 +708,7 @@ def test_wall_finish_selection_fills_empty_wall_finishes(monkeypatch) -> None:
     assert session_state["group_drafts"][0]["cop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["main_floor_lop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["other_floors_lop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
+    assert "floor_indicator_finish" not in session_state["group_drafts"][0]
     assert session_state["group_0_rear_wall_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_front_wall_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_handrail_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
@@ -719,6 +720,7 @@ def test_wall_finish_selection_fills_empty_wall_finishes(monkeypatch) -> None:
     assert session_state["group_0_cop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_main_floor_lop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_other_floors_lop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
+    assert "group_0_floor_indicator_finish" not in session_state
 
 
 def test_wall_finish_selection_keeps_existing_different_wall_finish(monkeypatch) -> None:
@@ -1687,6 +1689,19 @@ def test_group_defaults_use_no_seismic(monkeypatch) -> None:
     assert app._group_defaults(0)["seismic"] == app.DEFAULT_SEISMIC
 
 
+def test_floor_indicator_defaults_to_no_without_material(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{}],
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    defaults = app._group_defaults(0)
+
+    assert defaults["floor_indicator_type"] == app.DEFAULT_FLOOR_INDICATOR_TYPE == "НЕТ"
+    assert "floor_indicator_finish" not in defaults
+
+
 def test_group_defaults_use_ei60_fire_resistance(monkeypatch) -> None:
     session_state = FakeSessionState({
         "prefill_groups": [{}],
@@ -1918,6 +1933,16 @@ def test_signal_finish_fields_are_added_to_export_values() -> None:
     assert group["cop_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert group["main_floor_lop_finish"] == "Зеркальная нержавеющая сталь EX-MS01"
     assert group["floor_indicator_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
+
+
+def test_absent_floor_indicator_and_its_material_are_removed_before_export() -> None:
+    group = app._prepare_group_for_model({
+        "floor_indicator_type": "НЕТ",
+        "floor_indicator_finish": "Шлифованная нержавеющая сталь EX-HS01",
+    })
+
+    assert "floor_indicator_type" not in group
+    assert "floor_indicator_finish" not in group
 
 
 def test_cabin_component_finish_fields_are_added_to_export_values() -> None:
@@ -2583,6 +2608,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
             "seismic": app.DEFAULT_SEISMIC,
             "fire_resistance": app.DEFAULT_FIRE_RESISTANCE,
             "door_model": app.DEFAULT_DOOR_MODEL,
+            "floor_indicator_type": app.DEFAULT_FLOOR_INDICATOR_TYPE,
             "mgn_accessibility": "НЕТ",
         },
         {
@@ -2594,6 +2620,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
             "seismic": app.DEFAULT_SEISMIC,
             "fire_resistance": app.DEFAULT_FIRE_RESISTANCE,
             "door_model": app.DEFAULT_DOOR_MODEL,
+            "floor_indicator_type": app.DEFAULT_FLOOR_INDICATOR_TYPE,
             "mgn_accessibility": "НЕТ",
         },
     ]

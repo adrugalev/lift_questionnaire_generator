@@ -256,6 +256,30 @@ def test_floor_indicator_is_written_below_display_type(template_path, mapping_pa
     assert ws.cell(row=indicator_row, column=3)._style == ws.cell(row=indicator_row + 1, column=3)._style
 
 
+def test_absent_floor_indicator_is_not_written_to_questionnaire(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        project=ProjectInfo(project_name="Тестовый проект"),
+        lift_groups=[
+            LiftGroup(
+                lift_name="Л1",
+                quantity=1,
+                floor_indicator_type="НЕТ",
+                floor_indicator_finish="Шлифованная нержавеющая сталь EX-HS01",
+            )
+        ],
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+    indicator_row = next(
+        row
+        for row in range(1, ws.max_row + 1)
+        if ws.cell(row=row, column=1).value == "Индикация этажная"
+    )
+
+    assert ws.cell(row=indicator_row, column=3).value is None
+
+
 def test_questionnaire_reference_header_styles_are_applied(template_path, mapping_path):
     content = generate_questionnaire_xlsx(template_path, _questionnaire(1), mapping_path)
     ws = load_workbook(BytesIO(content)).active

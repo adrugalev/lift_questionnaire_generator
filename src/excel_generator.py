@@ -512,6 +512,8 @@ def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
     value = getattr(group, field_name, None)
     if _is_unselected_excel_value(value):
         return None
+    if field_name in {"floor_indicator_type", "floor_indicator_finish"} and not _group_has_floor_indicator(group):
+        return None
     if field_name == QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD and not _group_has_machine_room(group):
         return None
     paired_source_field = PAIRED_EXCEL_SOURCE_FIELDS.get(field_name)
@@ -1261,6 +1263,13 @@ def _questionnaire_has_machine_room_height(questionnaire: Questionnaire) -> bool
 def _group_has_machine_room(group: Any) -> bool:
     value = getattr(group, "machine_room", None)
     return str(value or "").strip().casefold() == QUESTIONNAIRE_MACHINE_ROOM_WITH_VALUE.casefold()
+
+
+def _group_has_floor_indicator(group: Any) -> bool:
+    value = getattr(group, QUESTIONNAIRE_FLOOR_INDICATOR_FIELD, None)
+    if _is_unselected_excel_value(value):
+        return False
+    return str(value).strip().casefold() != "нет"
 
 
 def _insert_machine_room_height_row(worksheet: Worksheet, group_rows: dict[str, int]) -> None:
