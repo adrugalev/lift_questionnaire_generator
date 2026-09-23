@@ -643,7 +643,7 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "ceiling_type": _random_select_value(options, "ceiling_type") or "EX-J135",
             "ceiling_finish": ceiling_finish,
             "skirting_finish": wall_finish,
-            "mirror": _random_select_value(options, "mirror") or "Нет",
+            "mirror": _random_select_value(options, "mirror", cabin_type=cabin_type) or "Нет",
             "door_opening_type": random.choice(["Телескопическое", "Центральное"]),
             "door_model": DEFAULT_DOOR_MODEL,
             "cabin_door_finish": wall_finish,
@@ -689,8 +689,11 @@ def _test_cabin_size(capacity: int) -> tuple[int, int]:
     return random.choice([(2000, 2500), (2100, 2800), (2400, 3000)])
 
 
-def _random_select_value(options: OptionsManager, option_key: str, field: str | None = None) -> str | None:
-    values = _select_values(options, option_key, field)
+def _random_select_value(
+    options: OptionsManager, option_key: str, field: str | None = None,
+    *, cabin_type: str | None = None,
+) -> str | None:
+    values = _select_values(options, option_key, field, cabin_type=cabin_type)
     return random.choice(values) if values else None
 
 
@@ -3072,7 +3075,12 @@ def _field_widget(
         return "ДА" if checked else "НЕТ"
     if kind == "select" and option_key:
         default = _normalize_select_option_value(option_key, default)
-        values = _select_values(options, option_key, field)
+        cabin_type = _group_defaults(group_index).get("cabin_type")
+        if option_key == "mirror":
+            _reset_incompatible_mirror(group_index, cabin_type)
+            if not _mirror_matches_cabin(default, cabin_type):
+                default = ""
+        values = _select_values(options, option_key, field, cabin_type=cabin_type)
         if field not in SELECT_WITHOUT_EMPTY_FIELDS:
             values = [""] + values
         allows_custom = option_key not in SELECT_WITHOUT_CUSTOM_OPTION_KEYS and field not in SELECT_WITHOUT_CUSTOM_FIELDS
@@ -3179,13 +3187,18 @@ def _main_landing_floor_options(underground_floors: int, stops: int | None = Non
     return [*underground_options, *[str(floor) for floor in range(1, main_count + 1)]]
 
 
-def _select_values(options: OptionsManager, option_key: str, field: str | None = None) -> list[str]:
+def _select_values(
+    options: OptionsManager, option_key: str, field: str | None = None,
+    *, cabin_type: str | None = None,
+) -> list[str]:
     image_values = list(_image_options_for_key(option_key).keys())
     manual_values = MANUAL_OPTION_VALUES.get(option_key, []) + MANUAL_FIELD_OPTION_VALUES.get(field or "", [])
     configured_values = options.get(option_key)
     merged: list[str] = []
     for value in image_values + manual_values + configured_values:
         value = _normalize_select_option_value(option_key, value)
+        if option_key == "mirror" and not _mirror_matches_cabin(value, cabin_type):
+            continue
         if value and value not in merged and _is_allowed_select_value(option_key, value, field):
             merged.append(value)
     return merged
@@ -3416,7 +3429,33 @@ def _mirror_value_with_description(value: str) -> str:
     if not article:
         return value
     description = MIRROR_ARTICLE_DESCRIPTIONS.get(article)
-    return f"{article}, {description}" if description else value
+    side = _mirror_side(value)
+    suffix = f", {side}" if side else ""
+    return f"{article}, {description}{suffix}" if description else value
+
+
+def _mirror_side(value: Any) -> str | None:
+    match = re.search(r"\b(слева|справа)\b", str(value or ""), re.IGNORECASE)
+    return match.group(1).lower() if match else None
+
+
+def _mirror_matches_cabin(value: Any, cabin_type: Any) -> bool:
+    if not _mirror_article_from_value(str(value or "")):
+        return True
+    through = str(cabin_type or "").strip().casefold() == "проходная"
+    return bool(_mirror_side(value)) == through
+
+
+def _reset_incompatible_mirror(group_index: int, cabin_type: Any) -> None:
+    key = f"group_{group_index}_mirror"
+    value = st.session_state.get(key, _group_defaults(group_index).get("mirror"))
+    if _mirror_matches_cabin(value, cabin_type):
+        return
+    st.session_state[key] = ""
+    st.session_state.pop(f"{key}_pending_choice", None)
+    _ensure_group_draft(group_index).pop("mirror", None)
+    if group_index < len(st.session_state.prefill_groups):
+        st.session_state.prefill_groups[group_index].pop("mirror", None)
 
 
 def _mirror_article_from_value(value: str) -> str | None:
@@ -3442,6 +3481,10 @@ def _image_option_picker(label: str, option_key: str, key: str, group_index: int
 @st.dialog("Выбор по фото")
 def _image_picker_dialog(label: str, option_key: str, key: str, group_index: int, field: str) -> None:
     image_options = _image_options_for_key(option_key)
+    if option_key == "mirror":
+        cabin_type = _group_defaults(group_index).get("cabin_type")
+        image_options = {label: path for label, path in image_options.items()
+                         if _mirror_matches_cabin(label, cabin_type)}
     st.caption(label)
     items = list(image_options.items())
     for row_start in range(0, len(items), 4):
@@ -3640,6 +3683,7 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
     if field == "stops":
         _apply_stops_derived_fields(group_index, value)
     if field == "cabin_type":
+        _reset_incompatible_mirror(group_index, value)
         stops_value = _stops_for_group(group_index, draft)
         _apply_stops_derived_fields(group_index, stops_value)
     if field == "underground_floors":
