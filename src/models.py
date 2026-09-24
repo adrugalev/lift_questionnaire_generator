@@ -55,6 +55,7 @@ class LiftGroup(BaseModel):
     floor_finish: Optional[str] = None
     handrail_type: Optional[str] = None
     handrail_finish: Optional[str] = None
+    handrail_walls: Optional[str] = None
     ceiling_type: Optional[str] = None
     ceiling_finish: Optional[str] = None
     skirting_finish: Optional[str] = None

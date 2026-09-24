@@ -21,6 +21,7 @@ from src.additional_options import ADDITIONAL_OPTION_FIELDS, ADDITIONAL_OPTION_T
 from src.excel_generator import ExcelGenerationError, generate_questionnaire_xlsx
 from src.file_utils import safe_filename
 from src.models import LiftGroup, ProjectInfo, Questionnaire
+from src.handrail_wall_picker import HANDRAIL_WALL_PICKER
 from src.materials import AFP_MATERIAL_FIELDS_BY_FLAG, is_stainless_steel_finish
 from src.options_manager import OptionsManager
 from src.version import app_version_history, app_version_label
@@ -116,7 +117,10 @@ IMAGE_RENDER_VARIANTS = {
     "dialog": (280, 80),
     "lightbox": (1600, 88),
 }
-APP_REFRESH_GROUP_FIELDS = frozenset({"lift_name", "quantity", "capacity_kg", "speed_ms", "stops"})
+APP_REFRESH_GROUP_FIELDS = frozenset({
+    "lift_name", "quantity", "capacity_kg", "speed_ms", "stops",
+    "firefighter_mode", "mgn_accessibility",
+})
 IMAGE_OPTION_DIRS = {
     "finish": LOCAL_TEMPLATES / "Walls_photo",
     "signal_steel_finish": LOCAL_TEMPLATES / "Walls_photo",
@@ -192,6 +196,11 @@ MIRROR_ARTICLE_DESCRIPTIONS = {
     "MEX-3": "во всю ширину стены до поручня",
     "MEX-4": "во всю ширину стены до пола",
 }
+HANDRAIL_WALL_LABELS = {
+    "left": "слева",
+    "right": "справа",
+    "rear": "на задней стене",
+}
 FLOOR_PREFIX_NAMES = [
     ("EX-DB", "Прорезиненное покрытие, PVC"),
     ("EX-DM", "Керамогранит"),
@@ -203,7 +212,7 @@ MANUAL_OPTION_VALUES = {
     "floor_finish": ["Под отделку"],
 }
 MANUAL_FIELD_OPTION_VALUES = {
-    "skirting_finish": ["Нет"],
+    "skirting_finish": ["НЕТ"],
     "floor_indicator_type": ["НЕТ"],
 }
 EXCLUDED_SELECT_OPTION_VALUES = {
@@ -265,6 +274,7 @@ STRICT_SELECT_OPTION_KEYS = {
 }
 SELECT_WITHOUT_EMPTY_FIELDS = {
     "door_model",
+    "skirting_finish",
 }
 SELECT_WITHOUT_CUSTOM_FIELDS = {
     "side_wall_finish",
@@ -370,6 +380,7 @@ DEFAULT_SEISMIC = "НЕТ"
 DEFAULT_FIRE_RESISTANCE = "EI-60"
 DEFAULT_DOOR_MODEL = "NBSL"
 DEFAULT_FLOOR_INDICATOR_TYPE = "НЕТ"
+DEFAULT_SKIRTING_FINISH = "НЕТ"
 HELPER_GROUP_FIELDS = {"underground_floors"}
 HELPER_GROUP_FIELDS.update(ADDITIONAL_OPTION_TRANSLATIONS)
 SIGNAL_FINISH_FIELDS = {
@@ -397,6 +408,7 @@ SYNCABLE_GROUP_FIELDS = {
     "floor_finish",
     "handrail_type",
     "handrail_finish",
+    "handrail_walls",
     "ceiling_type",
     "ceiling_finish",
     "skirting_finish",
@@ -455,6 +467,7 @@ FIELD_GROUPS = {
         ("floor_finish", "Пол", "select", "floor_finish"),
         ("handrail_type", "Тип поручня", "select", "handrail_type"),
         ("handrail_finish", "Материал поручня", "select", "signal_steel_finish"),
+        ("handrail_walls", "Расположение поручня", "handrail_walls", None),
         ("ceiling_type", "Тип потолка", "select", "ceiling_type"),
         ("ceiling_finish", "Материал потолка", "select", "ceiling_steel_finish"),
         ("skirting_finish", "Плинтус", "select", "finish"),
@@ -513,7 +526,6 @@ WALL_FINISH_FIELDS = ("side_wall_finish", "rear_wall_finish", "front_wall_finish
 WALL_LINKED_FINISH_FIELDS = (
     "handrail_finish",
     "ceiling_finish",
-    "skirting_finish",
     "cabin_door_finish",
     "main_floor_landing_door_finish",
     "other_floors_landing_door_finish",
@@ -614,6 +626,15 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
         wall_finish = _random_select_value(options, "finish") or "Шлифованная нержавеющая сталь EX-HS01"
         signal_finish = _random_select_value(options, "signal_steel_finish") or "Шлифованная нержавеющая сталь EX-HS01"
         ceiling_finish = _random_select_value(options, "ceiling_steel_finish") or signal_finish
+        handrail_type = _random_select_value(options, "handrail_type") or "EX-FS01"
+        handrail_walls = _normalize_handrail_walls(
+            random.sample(
+                _allowed_handrail_wall_ids(cabin_type),
+                random.randint(1, len(_allowed_handrail_wall_ids(cabin_type))),
+            ),
+            cabin_type,
+            handrail_type,
+        )
 
         group = {
             "section": f"Секция {index + 1}",
@@ -638,8 +659,9 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "front_wall_finish": wall_finish,
             CABIN_WALL_AFP_FIELD: "ДА",
             "floor_finish": _random_select_value(options, "floor_finish") or "Под отделку",
-            "handrail_type": _random_select_value(options, "handrail_type") or "EX-FS01",
+            "handrail_type": handrail_type,
             "handrail_finish": signal_finish,
+            "handrail_walls": handrail_walls,
             "ceiling_type": _random_select_value(options, "ceiling_type") or "EX-J135",
             "ceiling_finish": ceiling_finish,
             "skirting_finish": wall_finish,
@@ -1366,11 +1388,17 @@ def _filled_field_styles_css() -> str:
             padding: 0.9rem 1rem;
         }
 
-        .project-summary-title {
+        .project-summary-title,
+        .lift-team-sidebar-label,
+        section[data-testid="stSidebar"] .draft-sidebar-label {
             color: #313340;
             font-size: 1rem;
             font-weight: 700;
-            margin-bottom: 0.2rem;
+            line-height: 1.2;
+        }
+
+        .project-summary-title {
+            margin-bottom: 0.5rem;
         }
 
         .project-summary-name {
@@ -1383,24 +1411,52 @@ def _filled_field_styles_css() -> str:
 
         .project-summary-metrics {
             display: grid;
-            gap: 0.55rem;
-            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
         }
 
         .project-summary-metric {
+            align-items: center;
             background: #f4f7fb;
             border-radius: 0.6rem;
             display: flex;
-            flex-direction: column;
+            justify-content: space-between;
+            min-height: 3.4rem;
+            padding: 0.65rem 0.85rem;
+        }
+
+        .project-summary-metric--total {
+            background: #eaf2ff;
+            box-shadow: inset 0 0 0 1px #d9e6ff;
+            grid-column: 1 / -1;
+        }
+
+        .project-summary-subset-label {
+            color: #6b7280;
+            font-size: 0.76rem;
+            font-weight: 600;
+            grid-column: 1 / -1;
+            line-height: 1.2;
+        }
+
+        .project-summary-metric--subset {
+            min-height: 2.8rem;
             padding: 0.55rem 0.65rem;
+        }
+
+        .project-summary-metric--subset .project-summary-metric-label {
+            font-size: 0.72rem;
+        }
+
+        .project-summary-metric--subset .project-summary-metric-value {
+            font-size: 1.2rem;
         }
 
         .project-summary-metric-label {
             color: #6b7280;
             display: block;
-            font-size: 0.72rem;
+            font-size: 0.78rem;
             line-height: 1.15;
-            min-height: 1.15em;
         }
 
         .project-summary-metric-value {
@@ -1409,7 +1465,6 @@ def _filled_field_styles_css() -> str:
             font-size: 1.45rem;
             font-weight: 700;
             line-height: 1.15;
-            margin-top: 0.18rem;
         }
 
         .project-summary-breakdown {
@@ -1426,15 +1481,11 @@ def _filled_field_styles_css() -> str:
         }
 
         .lift-team-sidebar-label {
-            color: #313340;
-            font-size: 1rem;
-            font-weight: 700;
-            line-height: 1.2;
             margin-bottom: 0;
         }
 
         .lift-team-sidebar-gap {
-            height: 0.5rem;
+            height: 0.75rem;
         }
 
         .sidebar-block-gap {
@@ -1442,58 +1493,94 @@ def _filled_field_styles_css() -> str:
         }
 
         .draft-sidebar-gap {
-            height: 2.5rem;
+            height: 0.85rem;
         }
 
-        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] div[data-testid="stFileUploaderDropzone"] {
-            box-sizing: border-box !important;
-            padding: 0.75rem 0.85rem 0.95rem !important;
+        section[data-testid="stSidebar"] [class*="st-key-draft_sidebar_controls"] {
+            border-top: 1px solid #dce3eb;
+            padding: 0.7rem 0.2rem 0;
         }
 
-        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button {
-            box-sizing: border-box !important;
-            font-size: 0.9rem !important;
-            margin-left: calc(50% + 0.35rem) !important;
+        section[data-testid="stSidebar"] .draft-sidebar-label {
+            margin-bottom: 0.75rem;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] [data-testid="stFileUploaderDropzone"] {
+            background: transparent !important;
+            border: 0 !important;
+            min-height: 0 !important;
+            padding: 0 !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] [data-testid="stFileUploaderDropzoneInstructions"] {
+            display: none !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button,
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button {
+            background: transparent !important;
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 0.5rem !important;
+            box-shadow: none !important;
+            color: #526071 !important;
+            font-size: 0.78rem !important;
+            height: 2.1rem !important;
+            min-height: 2.1rem !important;
             min-width: 0 !important;
-            min-height: 2.55rem !important;
-            padding: 0.35rem 0.55rem !important;
-            width: 7.15rem !important;
+            padding: 0 !important;
+            position: relative !important;
+            transition: background-color 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease !important;
+            width: 100% !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button:hover,
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button:focus-visible,
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button:hover,
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button:focus-visible {
+            background: #eaf2ff !important;
+            border-color: #8db4f2 !important;
+            box-shadow: 0 0.15rem 0.45rem rgba(47, 102, 232, 0.12) !important;
+            color: #2259b8 !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button [data-testid="stIconMaterial"],
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button [data-testid="stIconMaterial"] {
+            font-size: 1rem !important;
+            left: 0.65rem !important;
+            position: absolute !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button [data-testid="stMarkdownContainer"],
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button [data-testid="stMarkdownContainer"] {
+            left: 50% !important;
+            position: absolute !important;
+            top: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            white-space: nowrap !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button p {
+            display: block !important;
+            font-size: 0.78rem !important;
+            font-weight: 400 !important;
+            line-height: 1.15 !important;
+            margin: 0 !important;
         }
 
         section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button p {
             font-size: 0 !important;
+            line-height: 1 !important;
+            margin: 0 !important;
         }
 
         section[data-testid="stSidebar"] [class*="st-key-draft_upload"] button p::after {
             content: "Загрузить";
-            font-size: 0.9rem !important;
-        }
-
-        section[data-testid="stSidebar"] [class*="st-key-draft_save"] {
-            margin-bottom: 2.55rem !important;
-            margin-left: calc(50% - 7.5rem) !important;
-            margin-top: -6.2rem !important;
-            position: relative;
-            width: 7.15rem !important;
-            z-index: 2;
-        }
-
-        section[data-testid="stSidebar"] [class*="st-key-draft_save"] button {
-            box-sizing: border-box !important;
-            font-size: 0.9rem !important;
-            min-width: 0 !important;
-            min-height: 2.55rem !important;
-            padding: 0.35rem 0.55rem !important;
-        }
-
-        section[data-testid="stSidebar"]:has(
-            [class*="st-key-draft_upload"] [data-testid="stFileChip"]
-        ) [class*="st-key-draft_save"] {
-            margin-bottom: 0 !important;
-            margin-left: auto !important;
-            margin-right: auto !important;
-            margin-top: 0.6rem !important;
-            z-index: auto !important;
+            display: block !important;
+            font-size: 0.78rem !important;
+            font-weight: 400 !important;
+            line-height: 1.15 !important;
         }
 
         section[data-testid="stSidebar"] [class*="st-key-project_preparer_"] button {
@@ -1503,12 +1590,19 @@ def _filled_field_styles_css() -> str:
             box-shadow: none !important;
             color: #1f2937 !important;
             font-size: 0.78rem !important;
+            height: 2rem !important;
             min-height: 2rem !important;
-            padding: 0.25rem 0.65rem !important;
+            padding: 0.15rem 0.5rem !important;
+        }
+
+        section[data-testid="stSidebar"] [class*="st-key-lift_team_sidebar"] [data-testid="stColumn"] > [data-testid="stVerticalBlock"] {
+            gap: 0.375rem !important;
         }
 
         section[data-testid="stSidebar"] [class*="st-key-project_preparer_"] button p {
             color: #1f2937 !important;
+            font-size: 0.78rem !important;
+            line-height: 1.15 !important;
         }
 
         </style>
@@ -1546,13 +1640,18 @@ def _render_project_summary_sidebar() -> None:
             <div class="project-summary-title">Кратко о проекте</div>
             <div class="project-summary-name">{project_name}</div>
             <div class="project-summary-metrics">
-                <div class="project-summary-metric">
+                <div class="project-summary-metric project-summary-metric--total">
                     <span class="project-summary-metric-label">Лифты</span>
                     <span class="project-summary-metric-value">{summary["lift_count"]}</span>
                 </div>
-                <div class="project-summary-metric">
-                    <span class="project-summary-metric-label">Группы</span>
-                    <span class="project-summary-metric-value">{summary["group_count"]}</span>
+                <div class="project-summary-subset-label">Из них:</div>
+                <div class="project-summary-metric project-summary-metric--subset">
+                    <span class="project-summary-metric-label">Лифты (ППП)</span>
+                    <span class="project-summary-metric-value">{summary["firefighter_lift_count"]}</span>
+                </div>
+                <div class="project-summary-metric project-summary-metric--subset">
+                    <span class="project-summary-metric-label">Лифты (МГН)</span>
+                    <span class="project-summary-metric-value">{summary["mgn_lift_count"]}</span>
                 </div>
             </div>
             {lift_breakdown_block}
@@ -1567,23 +1666,27 @@ def _draft_sidebar(project_data: dict[str, Any], group_data: list[dict[str, Any]
     restore_error = st.session_state.pop("draft_restore_error", None)
     content = _deferred_draft_content(project_data, group_data)
     st.sidebar.markdown('<div class="draft-sidebar-gap"></div>', unsafe_allow_html=True)
-    with st.sidebar.container(border=True):
-        st.markdown("**Черновик заполнения**")
-        uploaded_file = st.file_uploader(
-            "Загрузить черновик",
-            type=["json"],
-            key=f"draft_upload_{int(st.session_state.get('draft_upload_revision', 0))}",
-            label_visibility="collapsed",
-        )
-        st.download_button(
-            "Сохранить",
-            data=content,
-            file_name=_draft_download_filename(project_data),
-            mime="application/json",
-            key="draft_save",
-            use_container_width=True,
-            on_click="ignore",
-        )
+    with st.sidebar.container(key="draft_sidebar_controls"):
+        st.markdown('<div class="draft-sidebar-label">Черновик</div>', unsafe_allow_html=True)
+        save_column, upload_column = st.columns(2, gap="small")
+        with save_column:
+            st.download_button(
+                "Сохранить",
+                data=content,
+                file_name=_draft_download_filename(project_data),
+                mime="application/json",
+                key="draft_save",
+                icon=":material/save:",
+                use_container_width=True,
+                on_click="ignore",
+            )
+        with upload_column:
+            uploaded_file = st.file_uploader(
+                "Загрузить черновик",
+                type=["json"],
+                key=f"draft_upload_{int(st.session_state.get('draft_upload_revision', 0))}",
+                label_visibility="collapsed",
+            )
         if restored_notice:
             st.success(restored_notice)
         if restore_error:
@@ -1744,12 +1847,17 @@ def _browser_autosave_restore_dialog(candidate: dict[str, Any]) -> None:
             st.rerun()
     with restart_column:
         if st.button("Начать заново", use_container_width=True):
-            st.session_state.pending_draft_payload = _empty_draft_payload()
-            st.session_state.pending_draft_notice = ""
-            st.session_state.browser_autosave_checked = True
-            st.session_state.browser_autosave_clear_pending = True
-            st.session_state.pop("browser_autosave_candidate", None)
+            _start_new_questionnaire()
             st.rerun()
+
+
+def _start_new_questionnaire() -> None:
+    st.session_state.pending_draft_payload = _empty_draft_payload()
+    st.session_state.pending_draft_notice = ""
+    st.session_state.browser_autosave_checked = True
+    st.session_state.browser_autosave_clear_pending = True
+    st.session_state.browser_autosave_empty_digest = None
+    st.session_state.pop("browser_autosave_candidate", None)
 
 
 def _empty_draft_payload() -> dict[str, Any]:
@@ -1896,6 +2004,15 @@ def _normalize_draft_groups(value: Any) -> list[dict[str, Any]]:
             for key, raw_value in item.items()
             if key in allowed_fields
         }
+        if "skirting_finish" in group:
+            group["skirting_finish"] = _normalize_skirting_finish(group["skirting_finish"])
+        walls = _normalize_handrail_walls(
+            group.get("handrail_walls"), group.get("cabin_type"), group.get("handrail_type"),
+        )
+        if walls:
+            group["handrail_walls"] = walls
+        else:
+            group.pop("handrail_walls", None)
         groups.append(_drop_empty(group))
     return groups or [{}]
 
@@ -1911,19 +2028,13 @@ def _parse_draft_value(value: Any) -> Any:
 def _sync_project_widgets_from_draft(project: dict[str, Any]) -> None:
     for field in ("customer", "project_name", "address"):
         key = f"project_{field}"
-        value = project.get(field)
-        if value not in ("", None):
-            st.session_state[key] = value
-        else:
-            st.session_state.pop(key, None)
+        st.session_state[key] = str(project.get(field) or "")
     report_date = project.get("report_date")
-    if isinstance(report_date, date):
-        st.session_state["project_report_date"] = report_date
-    else:
-        st.session_state.pop("project_report_date", None)
+    st.session_state["project_report_date"] = (
+        report_date if isinstance(report_date, date) else date.today()
+    )
     prepared_by = _normalize_preparer_surname(project.get("prepared_by"))
-    if prepared_by:
-        st.session_state["project_prepared_by"] = prepared_by
+    st.session_state["project_prepared_by"] = prepared_by or ""
 
 
 def _json_ready(value: Any) -> Any:
@@ -1952,7 +2063,7 @@ def _render_lift_team_sidebar() -> str | None:
     if selected_surname:
         st.session_state["project_prepared_by"] = selected_surname
 
-    with st.sidebar.container(border=True):
+    with st.sidebar.container(border=True, key="lift_team_sidebar"):
         selected_index = (
             LIFT_TEAM_SURNAMES.index(selected_surname)
             if selected_surname in LIFT_TEAM_SURNAMES
@@ -2031,11 +2142,24 @@ def _project_summary_from_state() -> dict[str, Any]:
         st.session_state.get("project_project_name", prefill_project.get("project_name")) or ""
     ).strip()
     lift_count = 0
+    firefighter_lift_count = 0
+    mgn_lift_count = 0
     groups: list[dict[str, Any]] = []
     for index in range(group_count):
         defaults = _group_defaults(index)
         quantity = st.session_state.get(f"group_{index}_quantity", defaults.get("quantity"))
-        lift_count += _parse_positive_int_silent(quantity) or 0
+        group_lift_count = _parse_positive_int_silent(quantity) or 0
+        lift_count += group_lift_count
+        firefighter_mode = st.session_state.get(
+            f"group_{index}_firefighter_mode", defaults.get("firefighter_mode")
+        )
+        mgn_accessibility = st.session_state.get(
+            f"group_{index}_mgn_accessibility", defaults.get("mgn_accessibility")
+        )
+        if _truthy_yes_no(firefighter_mode):
+            firefighter_lift_count += group_lift_count
+        if _truthy_yes_no(mgn_accessibility):
+            mgn_lift_count += group_lift_count
         groups.append({
             "quantity": quantity,
             "speed_ms": st.session_state.get(f"group_{index}_speed_ms", defaults.get("speed_ms")),
@@ -2048,6 +2172,8 @@ def _project_summary_from_state() -> dict[str, Any]:
         "project_name": project_name,
         "group_count": group_count,
         "lift_count": lift_count,
+        "firefighter_lift_count": firefighter_lift_count,
+        "mgn_lift_count": mgn_lift_count,
         "lift_breakdown": _lift_summary_breakdown(groups),
     }
 
@@ -2184,10 +2310,10 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
             ):
                 source_index = int(st.session_state.active_group_index)
                 source_label = _group_display_label(source_index)
-                _sync_common_fields_from_selected_group(source_index)
+                transferred_lift_count = _sync_common_fields_from_selected_group(source_index)
                 st.session_state.group_sync_notice = (
                     f"Отделки и опции перенесены из лифта «{source_label}» "
-                    f"в остальные лифты ({st.session_state.group_count - 1})."
+                    f"в остальные лифты ({transferred_lift_count})."
                 )
                 st.rerun()
 
@@ -2253,6 +2379,15 @@ def _render_active_group_form(options: OptionsManager) -> None:
             _render_group_field_grid(checkbox_fields, 3, group, defaults, options, index)
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
             _render_group_field_grid(other_fields, 1, group, defaults, options, index)
+        elif section == "Кабина":
+            walls_index = next(i for i, item in enumerate(content_fields) if item[0] == "handrail_walls")
+            _render_group_field_grid(content_fields[:walls_index], 2, group, defaults, options, index)
+            field, label, kind, option_key = content_fields[walls_index]
+            group[field] = _field_widget(
+                label, kind, f"group_{index}_{field}", defaults.get(field),
+                options, option_key, index, field,
+            )
+            _render_group_field_grid(content_fields[walls_index + 1:], 2, group, defaults, options, index)
         else:
             has_visual_options = any(option_key in IMAGE_OPTION_DIRS for _, _, _, option_key in content_fields)
             column_count = 2 if has_visual_options else 3 if len(content_fields) >= 8 else 2
@@ -2745,6 +2880,8 @@ def _section_is_complete(section: str, group: dict[str, Any]) -> bool:
 
 
 def _field_is_complete(field: str, group: dict[str, Any]) -> bool:
+    if field == "handrail_walls" and _is_no_finish_required_value(group.get("handrail_type")):
+        return True
     if (
         field in {MACHINE_ROOM_HEIGHT_FIELD, ADDITIONAL_OPTIONS_OTHER_FIELD}
         or field in AFP_FIELDS
@@ -2879,10 +3016,10 @@ def _delete_group(index: int) -> None:
     _sync_group_widgets_from_group_data(current_groups)
 
 
-def _sync_common_fields_from_selected_group(source_index: int) -> None:
+def _sync_common_fields_from_selected_group(source_index: int) -> int:
     _normalize_group_lists()
     if source_index < 0 or source_index >= st.session_state.group_count:
-        return
+        return 0
 
     active_sections = {
         index: _normalize_group_section_name(st.session_state.get(f"group_{index}_active_section"))
@@ -2892,6 +3029,11 @@ def _sync_common_fields_from_selected_group(source_index: int) -> None:
         _collect_group_from_state(index, _group_defaults(index))
         for index in range(st.session_state.group_count)
     ]
+    transferred_lift_count = sum(
+        _parse_positive_int_silent(group.get("quantity")) or 1
+        for index, group in enumerate(groups)
+        if index != source_index
+    )
     source = dict(groups[source_index])
     for index in range(st.session_state.group_count):
         if index == source_index:
@@ -2909,6 +3051,7 @@ def _sync_common_fields_from_selected_group(source_index: int) -> None:
     for index, section in active_sections.items():
         if section:
             st.session_state[f"group_{index}_active_section"] = section
+    return transferred_lift_count
 
 
 def _field_kind(field_name: str) -> str:
@@ -2929,7 +3072,7 @@ def _group_defaults(index: int) -> dict[str, Any]:
     prefill = st.session_state.prefill_groups[index] if index < len(st.session_state.prefill_groups) else {}
     draft = _ensure_group_draft(index)
     merged = dict(prefill)
-    merged.update({key: value for key, value in draft.items() if value not in ("", None)})
+    merged.update(draft)
     if merged.get("group_operation") not in ("", None):
         merged["group_operation"] = _normalize_group_operation(merged["group_operation"])
     merged.setdefault("lift_type", DEFAULT_LIFT_TYPE)
@@ -2940,6 +3083,9 @@ def _group_defaults(index: int) -> dict[str, Any]:
     merged.setdefault("fire_resistance", DEFAULT_FIRE_RESISTANCE)
     merged.setdefault("door_model", DEFAULT_DOOR_MODEL)
     merged.setdefault("floor_indicator_type", DEFAULT_FLOOR_INDICATOR_TYPE)
+    merged["skirting_finish"] = (
+        _normalize_skirting_finish(merged.get("skirting_finish")) or DEFAULT_SKIRTING_FINISH
+    )
     if _is_no_finish_required_value(merged.get("floor_indicator_type")):
         merged.pop("floor_indicator_finish", None)
     return merged
@@ -2952,12 +3098,13 @@ def _collect_group_from_state(index: int, defaults: dict[str, Any]) -> dict[str,
         for field, _, kind, option_key in fields:
             key = f"group_{index}_{field}"
             value = draft.get(field, st.session_state.get(key, defaults.get(field)))
+            if field == "skirting_finish":
+                value = _normalize_skirting_finish(value) or DEFAULT_SKIRTING_FINISH
             if value == OTHER_OPTION:
                 value = st.session_state.get(f"{key}_custom")
             if kind == "checkbox_yes_no":
                 if field in ADDITIONAL_OPTION_TRANSLATIONS or field in AFP_FIELDS:
                     if not _truthy_yes_no(value):
-                        draft.pop(field, None)
                         continue
                     value = "ДА"
                 else:
@@ -2970,6 +3117,18 @@ def _collect_group_from_state(index: int, defaults: dict[str, Any]) -> dict[str,
                     st.session_state[key] = value
                 group[field] = value
                 draft[field] = value
+    original_handrail_walls = group.get("handrail_walls")
+    handrail_walls = _normalize_handrail_walls(
+        original_handrail_walls, group.get("cabin_type"), group.get("handrail_type"),
+    )
+    if handrail_walls:
+        group["handrail_walls"] = handrail_walls
+    else:
+        group.pop("handrail_walls", None)
+    if handrail_walls != (original_handrail_walls or "") or handrail_walls != draft.get("handrail_walls", ""):
+        _set_handrail_walls_state(
+            index, handrail_walls, group.get("cabin_type"), group.get("handrail_type"),
+        )
     if not _has_machine_room(group.get("machine_room")):
         group.pop(MACHINE_ROOM_HEIGHT_FIELD, None)
         draft.pop(MACHINE_ROOM_HEIGHT_FIELD, None)
@@ -2980,6 +3139,34 @@ def _collect_group_from_state(index: int, defaults: dict[str, Any]) -> dict[str,
             group["doors_count"] = draft.get("doors_count")
         group["button_marking"] = draft.get("button_marking")
     return group
+
+
+def _handrail_walls_widget(default: Any, group_index: int) -> str | None:
+    defaults = _group_defaults(group_index)
+    handrail_type = defaults.get("handrail_type")
+    if _is_no_finish_required_value(handrail_type):
+        return None
+
+    cabin_type = defaults.get("cabin_type")
+    if str(cabin_type or "").strip().casefold() not in {"проходная", "непроходная"}:
+        st.caption("Выберите тип кабины, чтобы указать стены для поручня.")
+        return None
+
+    value = st.session_state.get(f"group_{group_index}_handrail_walls", default)
+    selected = _handrail_wall_ids(value, cabin_type)
+    telescopic = str(defaults.get("door_opening_type") or "").strip().casefold() == "телескопическое"
+    HANDRAIL_WALL_PICKER(
+        data={
+            "through": str(cabin_type).strip().casefold() == "проходная",
+            "telescopic": telescopic,
+            "selected": selected,
+        },
+        default={"walls": selected},
+        key=f"group_{group_index}_handrail_wall_picker",
+        on_walls_change=lambda: _save_handrail_walls_from_component(group_index),
+        height="content",
+    )
+    return _normalize_handrail_walls(selected, cabin_type, handrail_type) or None
 
 
 def _field_widget(
@@ -2993,6 +3180,14 @@ def _field_widget(
     field: str,
 ) -> Any:
     default = _apply_pending_widget_choice(key, group_index, field, default)
+    if field == "skirting_finish":
+        default = _normalize_skirting_finish(default) or DEFAULT_SKIRTING_FINISH
+        if key in st.session_state:
+            state_value = _normalize_skirting_finish(st.session_state[key]) or DEFAULT_SKIRTING_FINISH
+            if state_value != st.session_state[key]:
+                st.session_state[key] = state_value
+    if kind == "handrail_walls":
+        return _handrail_walls_widget(default, group_index)
     if field == "main_landing_floor":
         return _main_landing_floor_widget(label, key, default, group_index, field)
     if kind == "speed_select":
@@ -3062,7 +3257,7 @@ def _field_widget(
             disabled = not _afp_checkbox_is_available(group_index, field)
             if disabled:
                 st.session_state[key] = False
-                _ensure_group_draft(group_index).pop(field, None)
+                _save_group_checkbox_value(group_index, field, key)
         current = _truthy_yes_no(st.session_state.get(key, default))
         checked = st.checkbox(
             label,
@@ -3247,6 +3442,11 @@ def _normalize_seismic(value: Any) -> str | None:
         return "НЕТ"
     allowed = {"НЕТ", "6 баллов", "7 баллов", "8 баллов", "9 баллов"}
     return text if text in allowed else None
+
+
+def _normalize_skirting_finish(value: Any) -> str:
+    text = str(value or "").strip()
+    return DEFAULT_SKIRTING_FINISH if text.casefold() in {"нет", "без плинтуса"} else text
 
 
 def _is_allowed_select_value(option_key: str | None, value: str, field: str | None = None) -> bool:
@@ -3440,6 +3640,56 @@ def _mirror_value_with_description(value: str) -> str:
     description = MIRROR_ARTICLE_DESCRIPTIONS.get(article)
     suffix = f", {side}" if side else ""
     return f"{article}, {description}{suffix}" if description else value
+
+
+def _allowed_handrail_wall_ids(cabin_type: Any) -> tuple[str, ...]:
+    if str(cabin_type or "").strip().casefold() == "проходная":
+        return ("left", "right")
+    return tuple(HANDRAIL_WALL_LABELS)
+
+
+def _handrail_wall_ids(value: Any, cabin_type: Any) -> list[str]:
+    aliases = {name.casefold(): name for name in HANDRAIL_WALL_LABELS}
+    aliases.update({label.casefold(): name for name, label in HANDRAIL_WALL_LABELS.items()})
+    entries = value if isinstance(value, (list, tuple, set)) else str(value or "").split(",")
+    selected = {aliases.get(str(entry).strip().casefold()) for entry in entries}
+    return [name for name in _allowed_handrail_wall_ids(cabin_type) if name in selected]
+
+
+def _normalize_handrail_walls(value: Any, cabin_type: Any, handrail_type: Any) -> str:
+    if _is_no_finish_required_value(handrail_type):
+        return ""
+    return ", ".join(HANDRAIL_WALL_LABELS[name] for name in _handrail_wall_ids(value, cabin_type))
+
+
+def _set_handrail_walls_state(
+    group_index: int, value: Any, cabin_type: Any, handrail_type: Any,
+) -> str:
+    normalized = _normalize_handrail_walls(value, cabin_type, handrail_type)
+    draft = _ensure_group_draft(group_index)
+    prefill_groups = st.session_state.get("prefill_groups", [])
+    prefill = prefill_groups[group_index] if group_index < len(prefill_groups) else None
+    key = f"group_{group_index}_handrail_walls"
+    if normalized:
+        draft["handrail_walls"] = normalized
+        st.session_state[key] = normalized
+        if isinstance(prefill, dict):
+            prefill["handrail_walls"] = normalized
+    else:
+        draft.pop("handrail_walls", None)
+        st.session_state.pop(key, None)
+        if isinstance(prefill, dict):
+            prefill.pop("handrail_walls", None)
+    return normalized
+
+
+def _save_handrail_walls_from_component(group_index: int) -> None:
+    component_state = st.session_state.get(f"group_{group_index}_handrail_wall_picker")
+    selected = component_state.get("walls", []) if isinstance(component_state, dict) else []
+    defaults = _group_defaults(group_index)
+    _set_handrail_walls_state(
+        group_index, selected, defaults.get("cabin_type"), defaults.get("handrail_type"),
+    )
 
 
 def _mirror_side(value: Any) -> str | None:
@@ -3686,7 +3936,7 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
         return
     draft = _ensure_group_draft(group_index)
     if value in ("", None):
-        draft.pop(field, None)
+        draft[field] = ""
     else:
         draft[field] = value
         _sync_empty_wall_finish_fields(group_index, field, value)
@@ -3694,8 +3944,14 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
         _apply_stops_derived_fields(group_index, value)
     if field == "cabin_type":
         _reset_incompatible_mirror(group_index, value)
+        defaults = _group_defaults(group_index)
+        _set_handrail_walls_state(
+            group_index, defaults.get("handrail_walls"), value, defaults.get("handrail_type"),
+        )
         stops_value = _stops_for_group(group_index, draft)
         _apply_stops_derived_fields(group_index, stops_value)
+    if field == "handrail_type" and _is_no_finish_required_value(value):
+        _set_handrail_walls_state(group_index, "", _group_defaults(group_index).get("cabin_type"), value)
     if field == "underground_floors":
         stops_value = _stops_for_group(group_index, draft)
         _apply_stops_derived_fields(group_index, stops_value)
@@ -3723,7 +3979,7 @@ def _save_group_custom_value(group_index: int, field: str, key: str) -> None:
     value = st.session_state.get(key)
     draft = _ensure_group_draft(group_index)
     if value in ("", None):
-        draft.pop(field, None)
+        draft[field] = ""
     else:
         draft[field] = value
         _sync_empty_wall_finish_fields(group_index, field, value)
@@ -3738,7 +3994,14 @@ def _save_group_checkbox_value(group_index: int, field: str, key: str) -> None:
     draft = _ensure_group_draft(group_index)
     checked = bool(st.session_state.get(key))
     if (field in ADDITIONAL_OPTION_TRANSLATIONS or field in AFP_FIELDS) and not checked:
-        draft.pop(field, None)
+        prefill = (
+            st.session_state.prefill_groups[group_index]
+            if group_index < len(st.session_state.prefill_groups) else {}
+        )
+        if _truthy_yes_no(prefill.get(field)):
+            draft[field] = "НЕТ"
+        else:
+            draft.pop(field, None)
         return
     draft[field] = "ДА" if checked else "НЕТ"
     if field == MGN_ACCESSIBILITY_FIELD and checked:
@@ -4011,6 +4274,8 @@ def _drop_empty(data: dict[str, Any]) -> dict[str, Any]:
 
 def _prepare_group_for_model(data: dict[str, Any]) -> dict[str, Any]:
     group = dict(data)
+    if "skirting_finish" in group:
+        group["skirting_finish"] = _normalize_skirting_finish(group["skirting_finish"])
     if group.get("group_operation") not in ("", None):
         group["group_operation"] = _normalize_group_operation(group["group_operation"])
     if not _has_machine_room(group.get("machine_room")):
@@ -4020,6 +4285,13 @@ def _prepare_group_for_model(data: dict[str, Any]) -> dict[str, Any]:
         group.pop("floor_indicator_finish", None)
     _apply_paired_finish_fields(group, SIGNAL_FINISH_FIELDS)
     _apply_paired_finish_fields(group, CABIN_COMPONENT_FINISH_FIELDS)
+    walls = _normalize_handrail_walls(
+        group.get("handrail_walls"), group.get("cabin_type"), group.get("handrail_type"),
+    )
+    if walls:
+        group["handrail_walls"] = walls
+    else:
+        group.pop("handrail_walls", None)
     _apply_mgn_option_dependency(group)
     _apply_additional_options(group)
     return _drop_group_helpers(group)

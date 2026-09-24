@@ -7,10 +7,12 @@ import re
 import unicodedata
 import zipfile
 from copy import copy
+from functools import lru_cache
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from PIL import Image as PillowImage
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl.cell.text import InlineFont
 from openpyxl.drawing.image import Image as ExcelImage
@@ -133,6 +135,7 @@ EXCEL_ALLOWED_TEXT_FINISH_VALUES = {
 EXCEL_ARTICLE_RE = re.compile(r"\b[A-Z]{1,3}-[A-Z]{0,4}\d+[A-Z]*\b", re.IGNORECASE)
 AFP_SUFFIX = "AFP"
 EMU_PER_PIXEL = 9525
+SUMMARY_IMAGE_RESOLUTION_SCALE = 2
 VISUAL_SUMMARY_BODY_FONT_SIZE = 12
 VISUAL_SUMMARY_TITLE_FONT_SIZE = 14
 VISUAL_SUMMARY_PROJECT_FONT_SIZE = 14
@@ -283,7 +286,10 @@ def generate_questionnaire_xlsx(
             value = _questionnaire_cell_value(group, field_name)
             if value is not None:
                 worksheet.cell(row=int(row), column=column).value = value
-    _fit_questionnaire_layout(worksheet, first_group_col, group_count)
+    _fit_questionnaire_layout(
+        worksheet, first_group_col, group_count,
+        handrail_row=group_rows.get("handrail_type"),
+    )
     _apply_questionnaire_reference_style(worksheet, first_group_col + group_count - 1)
     if include_summary_sheet:
         _append_visual_summary(workbook, questionnaire)
@@ -542,14 +548,26 @@ def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
     value_text = str(value).strip()
     finish_text = str(finish_value).strip()
     if _normalize_article_text(finish_text) in _normalize_article_text(value_text):
-        return value_text
-    finish_without_afp = _without_afp_suffix(finish_text)
-    if (
-        finish_without_afp != finish_text
-        and _normalize_article_text(finish_without_afp) in _normalize_article_text(value_text)
-    ):
-        return _material_with_afp(value_text)
-    return f"{value_text}, {finish_text}"
+        displayed_value = value_text
+    else:
+        finish_without_afp = _without_afp_suffix(finish_text)
+        if (
+            finish_without_afp != finish_text
+            and _normalize_article_text(finish_without_afp) in _normalize_article_text(value_text)
+        ):
+            displayed_value = _material_with_afp(value_text)
+        else:
+            displayed_value = f"{value_text}, {finish_text}"
+    if field_name == "handrail_type":
+        return _handrail_value_with_walls(group, displayed_value)
+    return displayed_value
+
+
+def _handrail_value_with_walls(group: Any, value: str) -> str:
+    walls = str(getattr(group, "handrail_walls", None) or "").strip()
+    if not walls or _is_no_finish_required_excel_value(value):
+        return value
+    return f"{value}\nРасположение поручня: {walls}"
 
 
 def _is_unselected_excel_value(value: Any) -> bool:
@@ -588,7 +606,9 @@ def _freeze_questionnaire_label_columns(worksheet: Worksheet) -> None:
     worksheet.freeze_panes = "C1"
 
 
-def _fit_questionnaire_layout(worksheet: Worksheet, first_group_col: int, group_count: int) -> None:
+def _fit_questionnaire_layout(
+    worksheet: Worksheet, first_group_col: int, group_count: int, *, handrail_row: int | None = None,
+) -> None:
     last_group_col = first_group_col + group_count - 1
     worksheet.column_dimensions["A"].width = QUESTIONNAIRE_RUSSIAN_COLUMN_WIDTH
     worksheet.column_dimensions["B"].width = QUESTIONNAIRE_CHINESE_COLUMN_WIDTH
@@ -598,7 +618,9 @@ def _fit_questionnaire_layout(worksheet: Worksheet, first_group_col: int, group_
 
     for row in range(1, worksheet.max_row + 1):
         _wrap_questionnaire_row(worksheet, row, last_group_col)
-        _fit_questionnaire_row_height(worksheet, row, last_group_col)
+        _fit_questionnaire_row_height(
+            worksheet, row, last_group_col, fit_all_lines=row == handrail_row,
+        )
 
 
 def _wrap_questionnaire_row(worksheet: Worksheet, row: int, last_col: int) -> None:
@@ -617,7 +639,9 @@ def _wrap_questionnaire_row(worksheet: Worksheet, row: int, last_col: int) -> No
         )
 
 
-def _fit_questionnaire_row_height(worksheet: Worksheet, row: int, last_col: int) -> None:
+def _fit_questionnaire_row_height(
+    worksheet: Worksheet, row: int, last_col: int, *, fit_all_lines: bool = False,
+) -> None:
     line_count = 1
     has_value = False
     for column in range(1, last_col + 1):
@@ -636,7 +660,10 @@ def _fit_questionnaire_row_height(worksheet: Worksheet, row: int, last_col: int)
     worksheet.row_dimensions[row].height = (
         QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT
         if line_count <= 1
-        else QUESTIONNAIRE_WRAPPED_ROW_HEIGHT
+        else (
+            max(QUESTIONNAIRE_WRAPPED_ROW_HEIGHT, QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT * line_count)
+            if fit_all_lines else QUESTIONNAIRE_WRAPPED_ROW_HEIGHT
+        )
     )
 
 
@@ -1076,8 +1103,23 @@ def _add_summary_image(
 ) -> None:
     image = ExcelImage(str(image_path))
     ratio = min(max_width / max(1, image.width), max_height / max(1, image.height))
-    image.width = int(image.width * ratio)
-    image.height = int(image.height * ratio)
+    display_width = max(1, int(image.width * ratio))
+    display_height = max(1, int(image.height * ratio))
+    pixel_width = display_width * SUMMARY_IMAGE_RESOLUTION_SCALE
+    pixel_height = display_height * SUMMARY_IMAGE_RESOLUTION_SCALE
+    if image.width > pixel_width or image.height > pixel_height:
+        image = ExcelImage(
+            BytesIO(
+                _summary_thumbnail_png(
+                    image_path,
+                    pixel_width,
+                    pixel_height,
+                    image_path.stat().st_mtime_ns,
+                )
+            )
+        )
+    image.width = display_width
+    image.height = display_height
     image.anchor = _centered_image_anchor(
         worksheet,
         row,
@@ -1088,6 +1130,23 @@ def _add_summary_image(
         image.height,
     )
     worksheet.add_image(image)
+
+
+@lru_cache(maxsize=128)
+def _summary_thumbnail_png(
+    image_path: Path,
+    pixel_width: int,
+    pixel_height: int,
+    modified_at_ns: int,
+) -> bytes:
+    # The modification time refreshes cached thumbnails when a template image is replaced.
+    with PillowImage.open(image_path) as source:
+        source.thumbnail((pixel_width, pixel_height), PillowImage.Resampling.LANCZOS)
+        if source.mode not in {"RGB", "RGBA", "L", "LA", "P"}:
+            source = source.convert("RGB")
+        output = BytesIO()
+        source.save(output, format="PNG", optimize=True)
+        return output.getvalue()
 
 
 def _centered_image_anchor(
@@ -1173,7 +1232,10 @@ def _visual_summary_items(group: Any, fields: list[tuple[str, str, str]]) -> lis
         value = getattr(group, field_name, None)
         image_path = _excel_image_path_for_value(option_key, value)
         if value and image_path:
-            items.append((label, str(value), image_path))
+            displayed_value = str(value)
+            if field_name == "handrail_type":
+                displayed_value = _handrail_value_with_walls(group, displayed_value)
+            items.append((label, displayed_value, image_path))
     return items
 
 

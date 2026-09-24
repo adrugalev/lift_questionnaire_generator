@@ -138,6 +138,26 @@ def test_sync_common_fields_uses_selected_group_and_preserves_its_changes(monkey
     assert session_state.prefill_groups[2]["capacity_kg"] == 1600
 
 
+@pytest.mark.parametrize(
+    ("quantities", "source_index", "expected_lifts"),
+    [([1, 3], 0, 3), ([2, 3, 4], 1, 6)],
+)
+def test_sync_notice_counts_destination_lifts_not_groups(
+    monkeypatch, quantities, source_index, expected_lifts,
+) -> None:
+    groups = [{"quantity": quantity} for quantity in quantities]
+    session_state = FakeSessionState({
+        "group_count": len(groups),
+        "active_group_index": source_index,
+        "prefill_groups": groups,
+        "group_drafts": [{} for _ in groups],
+        "extracted_group_fields": [set() for _ in groups],
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._sync_common_fields_from_selected_group(source_index) == expected_lifts
+
+
 def test_capacity_options_are_standard_values() -> None:
     assert app.CAPACITY_OPTIONS_KG == [
         400,
@@ -699,6 +719,82 @@ def test_handrail_type_has_no_custom_choice(monkeypatch) -> None:
     assert "handrail_type" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
 
 
+@pytest.mark.parametrize("cabin_type,chosen,expected", [
+    ("Проходная", ["rear", "right", "left", "left"], "слева, справа"),
+    ("Непроходная", ["rear", "left"], "слева, на задней стене"),
+])
+def test_handrail_walls_follow_cabin_type_and_support_multiple(cabin_type, chosen, expected) -> None:
+    assert app._normalize_handrail_walls(chosen, cabin_type, "EX-FS01") == expected
+    assert app._handrail_wall_ids(expected, cabin_type) == [
+        wall for wall in app._allowed_handrail_wall_ids(cabin_type)
+        if app.HANDRAIL_WALL_LABELS[wall] in expected
+    ]
+    assert app._normalize_handrail_walls(chosen, cabin_type, "Без поручня") == ""
+
+
+def test_handrail_wall_click_persists_and_cabin_change_removes_rear(monkeypatch) -> None:
+    state = FakeSessionState(
+        prefill_groups=[{}],
+        group_drafts=[{"cabin_type": "Непроходная", "handrail_type": "EX-FS01"}],
+        group_0_cabin_type="Непроходная",
+        group_0_handrail_type="EX-FS01",
+        group_0_handrail_wall_picker={"walls": ["left", "rear"]},
+    )
+    monkeypatch.setattr(app.st, "session_state", state)
+
+    app._save_handrail_walls_from_component(0)
+    assert state.group_drafts[0]["handrail_walls"] == "слева, на задней стене"
+    assert state.prefill_groups[0]["handrail_walls"] == "слева, на задней стене"
+
+    state.group_0_cabin_type = "Проходная"
+    app._save_group_widget_value(0, "cabin_type", "group_0_cabin_type")
+    assert state.group_drafts[0]["handrail_walls"] == "слева"
+    assert state.group_0_handrail_walls == "слева"
+
+    state.group_0_handrail_type = "Без поручня"
+    app._save_group_widget_value(0, "handrail_type", "group_0_handrail_type")
+    assert "handrail_walls" not in state.group_drafts[0]
+    assert "handrail_walls" not in state.prefill_groups[0]
+    assert "group_0_handrail_walls" not in state
+
+
+def test_handrail_walls_survive_draft_loading_and_disappear_without_handrail() -> None:
+    groups = app._normalize_draft_groups([
+        {"cabin_type": "Проходная", "handrail_type": "EX-FS01", "handrail_walls": "справа, на задней стене, слева"},
+        {"cabin_type": "Непроходная", "handrail_type": "Без поручня", "handrail_walls": "слева"},
+    ])
+    assert groups[0]["handrail_walls"] == "слева, справа"
+    assert "handrail_walls" not in groups[1]
+    assert "handrail_walls" in SYNCABLE_GROUP_FIELDS
+
+
+def test_handrail_diagram_follows_door_opening_selected_on_doors_tab(monkeypatch) -> None:
+    state = FakeSessionState(
+        prefill_groups=[{}],
+        group_drafts=[{
+            "cabin_type": "Проходная",
+            "handrail_type": "EX-FS01",
+            "door_opening_type": "Центральное",
+        }],
+    )
+    monkeypatch.setattr(app.st, "session_state", state)
+    picker_calls = []
+    monkeypatch.setattr(app, "HANDRAIL_WALL_PICKER", lambda **kwargs: picker_calls.append(kwargs))
+
+    app._handrail_walls_widget(None, 0)
+    assert picker_calls[-1]["data"]["telescopic"] is False
+
+    state.group_0_door_opening_type = "Телескопическое"
+    app._save_group_widget_value(0, "door_opening_type", "group_0_door_opening_type")
+    app._handrail_walls_widget(None, 0)
+    assert picker_calls[-1]["data"]["telescopic"] is True
+
+    state.group_0_door_opening_type = "Центральное"
+    app._save_group_widget_value(0, "door_opening_type", "group_0_door_opening_type")
+    app._handrail_walls_widget(None, 0)
+    assert picker_calls[-1]["data"]["telescopic"] is False
+
+
 def test_ceiling_type_excludes_standard_and_custom_choice(monkeypatch) -> None:
     class FakeOptions:
         def get(self, option_key: str) -> list[str]:
@@ -749,11 +845,12 @@ def test_wall_finish_fields_exclude_generic_text_options_and_custom_choice(monke
     assert "rear_wall_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert "front_wall_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert "skirting_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
+    assert "skirting_finish" in app.SELECT_WITHOUT_EMPTY_FIELDS
     assert "cabin_door_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert "main_floor_landing_door_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert "other_floors_landing_door_finish" in app.SELECT_WITHOUT_CUSTOM_FIELDS
     assert app._select_values(FakeOptions(), "finish", "skirting_finish") == [
-        "Нет",
+        "НЕТ",
         "Шлифованная нержавеющая сталь EX-HS01",
     ]
     assert app._select_values(FakeOptions(), "finish", "other_floors_landing_door_finish") == [
@@ -773,7 +870,7 @@ def test_wall_finish_selection_fills_empty_wall_finishes(monkeypatch) -> None:
     assert session_state["group_drafts"][0]["front_wall_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["handrail_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["ceiling_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
-    assert session_state["group_drafts"][0]["skirting_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
+    assert "skirting_finish" not in session_state["group_drafts"][0]
     assert session_state["group_drafts"][0]["cabin_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["main_floor_landing_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["other_floors_landing_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
@@ -785,7 +882,7 @@ def test_wall_finish_selection_fills_empty_wall_finishes(monkeypatch) -> None:
     assert session_state["group_0_front_wall_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_handrail_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_ceiling_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
-    assert session_state["group_0_skirting_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
+    assert "group_0_skirting_finish" not in session_state
     assert session_state["group_0_cabin_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_main_floor_landing_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_0_other_floors_landing_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
@@ -818,7 +915,7 @@ def test_wall_finish_selection_keeps_existing_different_wall_finish(monkeypatch)
     assert session_state["group_drafts"][0]["front_wall_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["handrail_finish"] == "Зеркальная нержавеющая сталь EX-MS01"
     assert session_state["group_drafts"][0]["ceiling_finish"] == "Зеркальная нержавеющая сталь EX-MS01"
-    assert session_state["group_drafts"][0]["skirting_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
+    assert "skirting_finish" not in session_state["group_drafts"][0]
     assert session_state["group_drafts"][0]["cabin_door_finish"] == "Зеркальная нержавеющая сталь EX-MS01"
     assert session_state["group_drafts"][0]["main_floor_landing_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert session_state["group_drafts"][0]["other_floors_landing_door_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
@@ -831,17 +928,38 @@ def test_wall_finish_selection_does_not_fill_absent_component_finishes(monkeypat
     session_state = FakeSessionState({
         "group_drafts": [{
             "handrail_type": "Без поручня",
-            "skirting_finish": "Нет",
+            "skirting_finish": "НЕТ",
         }],
         "group_0_handrail_type": "Без поручня",
-        "group_0_skirting_finish": "Нет",
+        "group_0_skirting_finish": "НЕТ",
     })
     monkeypatch.setattr(app.st, "session_state", session_state)
 
     app._sync_empty_wall_finish_fields(0, "side_wall_finish", "Шлифованная нержавеющая сталь EX-HS01")
 
     assert "handrail_finish" not in session_state["group_drafts"][0]
-    assert session_state["group_drafts"][0]["skirting_finish"] == "Нет"
+    assert session_state["group_drafts"][0]["skirting_finish"] == "НЕТ"
+
+
+def test_skirting_defaults_to_no_and_keeps_explicit_material(monkeypatch) -> None:
+    session_state = FakeSessionState({"prefill_groups": [{}], "group_drafts": [{}]})
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    defaults = app._group_defaults(0)
+    assert defaults["skirting_finish"] == "НЕТ"
+    assert app._collect_group_from_state(0, defaults)["skirting_finish"] == "НЕТ"
+
+    material = "Шлифованная нержавеющая сталь EX-HS01"
+    session_state["group_drafts"][0]["skirting_finish"] = material
+    assert app._group_defaults(0)["skirting_finish"] == material
+
+
+@pytest.mark.parametrize("old_value", ["Без плинтуса", "Нет", "НЕТ"])
+def test_skirting_old_draft_values_become_no(old_value) -> None:
+    groups = app._normalize_draft_groups([{"skirting_finish": old_value}])
+
+    assert groups[0]["skirting_finish"] == "НЕТ"
+    assert app._prepare_group_for_model({"skirting_finish": old_value})["skirting_finish"] == "НЕТ"
 
 
 def test_group_display_label_uses_single_lift_name() -> None:
@@ -993,8 +1111,34 @@ def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
         "project_name": "Проект из ТЗ",
         "group_count": 3,
         "lift_count": 5,
+        "firefighter_lift_count": 0,
+        "mgn_lift_count": 0,
         "lift_breakdown": [],
     }
+
+
+def test_project_summary_counts_firefighter_and_mgn_lifts_by_group_quantity(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 4,
+        "prefill_project": {},
+        "prefill_groups": [
+            {"quantity": 2, "firefighter_mode": "ДА", "mgn_accessibility": "НЕТ"},
+            {"quantity": 1, "firefighter_mode": "НЕТ"},
+            {"quantity": 1, "firefighter_mode": "НЕТ", "mgn_accessibility": "НЕТ"},
+            {"firefighter_mode": "ДА", "mgn_accessibility": "ДА"},
+        ],
+        "group_drafts": [{}, {"quantity": 3, "mgn_accessibility": "ДА"}, {}, {}],
+        "group_2_quantity": "4",
+        "group_2_firefighter_mode": "ДА",
+        "group_2_mgn_accessibility": True,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    summary = app._project_summary_from_state()
+
+    assert summary["lift_count"] == 9
+    assert summary["firefighter_lift_count"] == 6
+    assert summary["mgn_lift_count"] == 7
 
 
 def test_draft_payload_serializes_current_form_state(monkeypatch) -> None:
@@ -1148,6 +1292,52 @@ def test_apply_draft_payload_restores_project_groups_and_widgets(monkeypatch) ->
     assert session_state["group_1_mgn_accessibility"] is True
     assert session_state["group_0_active_section"] == "Кабина"
     assert session_state["group_1_active_section"] == "Двери"
+
+
+def test_start_over_clears_existing_form_and_browser_autosave(monkeypatch) -> None:
+    component_calls = []
+    session_state = FakeSessionState({
+        "prefill_project": {"customer": "Старый заказчик", "prepared_by": "Другалёв"},
+        "project_customer": "Старый заказчик",
+        "project_project_name": "Старый объект",
+        "project_address": "Старый адрес",
+        "project_report_date": app.date(2026, 9, 17),
+        "project_prepared_by": "Другалёв",
+        "group_count": 2,
+        "group_drafts": [{"section": "Старая секция"}, {"lift_name": "Л2"}],
+        "group_0_section": "Старая секция",
+        "group_1_lift_name": "Л2",
+        "active_group_index": 1,
+        "browser_autosave_empty_digest": "old-form-digest",
+        "browser_autosave_candidate": {"project_name": "Старый объект"},
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(
+        app, "BROWSER_DRAFT_STORAGE_COMPONENT", lambda **kwargs: component_calls.append(kwargs),
+    )
+
+    app._start_new_questionnaire()
+    app._apply_pending_draft_restore()
+
+    assert [session_state[f"project_{field}"] for field in ("customer", "project_name", "address")] == ["", "", ""]
+    assert session_state["project_report_date"] == app.date.today()
+    assert session_state["project_prepared_by"] == ""
+    assert session_state["prefill_project"] == {}
+    assert session_state["group_count"] == 1
+    assert session_state["group_drafts"] == [{}]
+    assert "group_0_section" not in session_state
+    assert "group_1_lift_name" not in session_state
+    assert session_state["active_group_index"] == 0
+    assert "browser_autosave_candidate" not in session_state
+
+    blank_project = {
+        "customer": "", "project_name": "", "address": "",
+        "report_date": app.date.today(), "prepared_by": None,
+    }
+    app._sync_browser_autosave(blank_project, [{}])
+    assert component_calls[-1]["data"]["command"] == "clear"
+    app._sync_browser_autosave(blank_project, [{}])
+    assert component_calls[-1]["data"]["command"] == "clear"
 
 
 def test_pending_draft_is_applied_before_form_widgets_are_rendered(monkeypatch) -> None:
@@ -1320,7 +1510,7 @@ def test_lift_noun_uses_russian_quantity_forms() -> None:
     assert app._lift_noun(22) == "лифта"
 
 
-def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
+def test_project_summary_shows_total_firefighter_and_mgn_lift_counts(monkeypatch) -> None:
     rendered: list[str] = []
     monkeypatch.setattr(
         app,
@@ -1329,6 +1519,8 @@ def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
             "project_name": "Тест",
             "group_count": 3,
             "lift_count": 4,
+            "firefighter_lift_count": 2,
+            "mgn_lift_count": 3,
             "lift_breakdown": ["4 лифта — 1,6 м/с, 630 кг, 7 ост."],
         },
     )
@@ -1343,7 +1535,13 @@ def test_project_summary_uses_short_metric_labels(monkeypatch) -> None:
     assert rendered[0] == '<div class="sidebar-block-gap"></div>'
     summary_html = rendered[-1]
     assert ">Лифты<" in summary_html
-    assert ">Группы<" in summary_html
+    assert ">Лифты (ППП)<" in summary_html
+    assert ">Лифты (МГН)<" in summary_html
+    assert ">Группы<" not in summary_html
+    assert summary_html.count('class="project-summary-metric ') == 3
+    assert '<span class="project-summary-metric-value">4</span>' in summary_html
+    assert '<span class="project-summary-metric-value">2</span>' in summary_html
+    assert '<span class="project-summary-metric-value">3</span>' in summary_html
     assert "Лифтов в проекте" not in summary_html
     assert "4 лифта — 1,6 м/с, 630 кг, 7 ост." in summary_html
     assert '</div>\n            <div class="project-summary-breakdown">' in summary_html
@@ -1399,13 +1597,13 @@ def test_inline_thumbnail_css_fits_full_image() -> None:
     assert "cursor: zoom-out;" in css
 
 
-def test_project_summary_breakdown_uses_small_text_and_keeps_values_aligned() -> None:
+def test_project_summary_breakdown_uses_small_text_and_lift_metric_is_compact() -> None:
     css = app._filled_field_styles_css()
 
     assert ".project-summary-metric {" in css
     assert "margin: 0;" in css
-    assert "flex-direction: column;" in css
-    assert "min-height: 1.15em;" in css
+    assert "justify-content: space-between;" in css
+    assert "min-height: 3.4rem;" in css
     assert ".project-summary-breakdown {" in css
     assert "font-size: 0.68rem;" in css
     assert "border-top: 1px solid #e1e7ef;" in css
@@ -1425,7 +1623,7 @@ def test_draft_sidebar_has_gap_from_project_summary() -> None:
     assert ".sidebar-block-gap {" in css
     assert "height: 1.25rem;" in css
     assert ".draft-sidebar-gap {" in css
-    assert "height: 2.5rem;" in css
+    assert "height: 0.85rem;" in css
 
 
 def test_deferred_draft_content_reads_latest_group_values(monkeypatch) -> None:
@@ -1466,21 +1664,52 @@ def test_fragment_field_change_only_requests_app_refresh_for_summary_fields(monk
     assert session_state["group_field_app_refresh_requested"] is True
 
 
-def test_draft_save_button_moves_below_an_uploaded_file() -> None:
+def test_removing_firefighter_and_mgn_options_refreshes_sidebar_counts(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "group_count": 2,
+        "prefill_project": {},
+        "prefill_groups": [
+            {"quantity": 2, "firefighter_mode": "ДА", "mgn_accessibility": "ДА"},
+            {"quantity": 3, "firefighter_mode": "ДА", "mgn_accessibility": "ДА"},
+        ],
+        "group_drafts": [{}, {}],
+        "group_1_firefighter_mode": "ДА",
+        "group_1_mgn_accessibility": True,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._project_summary_from_state()["firefighter_lift_count"] == 5
+    assert app._project_summary_from_state()["mgn_lift_count"] == 5
+
+    session_state["group_1_firefighter_mode"] = "НЕТ"
+    app._save_group_widget_value_from_fragment(1, "firefighter_mode", "group_1_firefighter_mode")
+    assert session_state.pop("group_field_app_refresh_requested") is True
+    assert app._project_summary_from_state()["firefighter_lift_count"] == 2
+
+    session_state["group_1_mgn_accessibility"] = False
+    app._save_group_checkbox_value_from_fragment(1, "mgn_accessibility", "group_1_mgn_accessibility")
+    assert session_state.pop("group_field_app_refresh_requested") is True
+    assert app._project_summary_from_state()["mgn_lift_count"] == 2
+
+    session_state["group_0_firefighter_mode"] = ""
+    app._save_group_widget_value_from_fragment(0, "firefighter_mode", "group_0_firefighter_mode")
+    assert session_state.pop("group_field_app_refresh_requested") is True
+    session_state.pop("group_0_firefighter_mode")
+    assert app._group_defaults(0)["firefighter_mode"] == ""
+    assert app._project_summary_from_state()["firefighter_lift_count"] == 0
+
+
+def test_draft_sidebar_has_compact_buttons_without_file_metadata() -> None:
     css = app._filled_field_styles_css()
 
     assert '[class*="st-key-draft_save"]' in css
-    assert "margin-left: calc(50% - 7.5rem) !important;" in css
-    assert "margin-top: -6.2rem !important;" in css
-    assert "width: 7.15rem !important;" in css
+    assert '[class*="st-key-draft_sidebar_controls"]' in css
     assert '[class*="st-key-draft_upload"] button' in css
-    assert "margin-left: calc(50% + 0.35rem) !important;" in css
+    assert '[data-testid="stFileUploaderDropzoneInstructions"]' in css
+    assert "display: none !important;" in css
     assert 'content: "Загрузить";' in css
-    assert "width: 7.15rem !important;" in css
-    assert "min-height: 2.55rem !important;" in css
-    assert '[data-testid="stFileChip"]' in css
-    assert "margin-left: auto !important;" in css
-    assert "margin-top: 0.6rem !important;" in css
+    assert "min-height: 2.1rem !important;" in css
+    assert "margin-top: -6.2rem !important;" not in css
 
 
 def test_download_block_passes_summary_sheet_choice_to_generator(monkeypatch) -> None:
@@ -2019,14 +2248,17 @@ def test_absent_floor_indicator_and_its_material_are_removed_before_export() -> 
 
 def test_cabin_component_finish_fields_are_added_to_export_values() -> None:
     group = app._prepare_group_for_model({
+        "cabin_type": "Непроходная",
         "handrail_type": "EX-FS01",
         "handrail_finish": "Шлифованная нержавеющая сталь EX-HS01",
+        "handrail_walls": "слева, на задней стене",
         "ceiling_type": "EX-J135",
         "ceiling_finish": "Зеркальная нержавеющая сталь EX-MS01",
         "skirting_finish": "Шлифованная нержавеющая сталь EX-HS01",
     })
 
     assert group["handrail_type"] == "EX-FS01, Шлифованная нержавеющая сталь EX-HS01"
+    assert group["handrail_walls"] == "слева, на задней стене"
     assert group["ceiling_type"] == "EX-J135, Зеркальная нержавеющая сталь EX-MS01"
     assert group["skirting_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
     assert group["handrail_finish"] == "Шлифованная нержавеющая сталь EX-HS01"
@@ -2037,20 +2269,24 @@ def test_unselected_materials_are_not_exported_as_partial_values() -> None:
     group = app._prepare_group_for_model({
         "cop_type": "EX-AC99A",
         "handrail_type": "EX-FS01",
+        "handrail_walls": "справа",
         "ceiling_type": "EX-J135",
     })
 
     assert "cop_type" not in group
     assert "handrail_type" not in group
+    assert "handrail_walls" not in group
     assert "ceiling_type" not in group
 
     group_without_handrail = app._prepare_group_for_model({
         "handrail_type": "Без поручня, Шлифованная нержавеющая сталь EX-HS01",
         "handrail_finish": "Шлифованная нержавеющая сталь EX-HS01",
+        "handrail_walls": "слева",
     })
 
     assert group_without_handrail["handrail_type"] == "Без поручня"
     assert "handrail_finish" not in group_without_handrail
+    assert "handrail_walls" not in group_without_handrail
 
 
 def test_machine_room_height_is_removed_without_machine_room() -> None:
@@ -2089,7 +2325,7 @@ def test_cabin_section_does_not_require_finish_when_component_is_absent() -> Non
     group = {field: "filled" for field, _, _, _ in app.FIELD_GROUPS["Кабина"]}
     group["handrail_type"] = "Без поручня"
     group["handrail_finish"] = ""
-    group["skirting_finish"] = "Нет"
+    group["skirting_finish"] = "НЕТ"
 
     assert app._section_is_complete("Кабина", group)
 
@@ -2242,6 +2478,23 @@ def test_afp_checkbox_is_disabled_and_cleared_without_stainless_material(monkeyp
     assert captured["disabled"] is True
     assert captured["value"] is False
     assert field not in session_state["group_drafts"][0]
+
+
+def test_disabled_afp_does_not_reappear_from_prefilled_group(monkeypatch) -> None:
+    field = app.CABIN_WALL_AFP_FIELD
+    key = f"group_0_{field}"
+    session_state = FakeSessionState({
+        "prefill_groups": [{field: "ДА"}],
+        "group_drafts": [{"side_wall_finish": "Натуральное дерево, шпон PM-015"}],
+        key: True,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(app.st, "checkbox", lambda _label, **kwargs: kwargs["value"])
+
+    assert app._field_widget(app.AFP_FIELD_LABEL, "checkbox_yes_no", key, "ДА", object(), None, 0, field) == "НЕТ"
+    session_state.pop(key)
+    assert app._group_defaults(0)[field] == "НЕТ"
+    assert field not in app._collect_group_from_state(0, app._group_defaults(0))
 
 
 def test_capacity_select_accepts_custom_value(monkeypatch) -> None:
@@ -2531,8 +2784,8 @@ def test_copied_group_values_can_be_cleared_without_restoring_prefill(monkeypatc
     session_state["group_1_capacity_kg"] = ""
     app._save_group_widget_value(1, "capacity_kg", "group_1_capacity_kg")
 
-    assert "capacity_kg" not in session_state["group_drafts"][1]
-    assert "capacity_kg" not in app._group_defaults(1)
+    assert session_state["group_drafts"][1]["capacity_kg"] == ""
+    assert app._group_defaults(1)["capacity_kg"] == ""
     assert app._collect_group_from_state(1, app._group_defaults(1)).get("capacity_kg") is None
 
 
@@ -2577,6 +2830,75 @@ def test_section_change_persists_edited_values_from_every_group_tab(monkeypatch)
     assert collected["shaft_width_mm"] == "2100"
     assert app._truthy_yes_no(collected["option_ard"])
     assert session_state["group_1_active_section"] == doors_section
+
+
+def test_cleared_prefilled_values_stay_cleared_after_switching_sections(monkeypatch) -> None:
+    section_key = "group_0_active_section_widget_0_0"
+    session_state = FakeSessionState({
+        "group_count": 1,
+        "prefill_groups": [{
+            "cabin_height_mm": 2200,
+            "mirror": "МЕХ-1",
+            "firefighter_mode": "ДА",
+            "mgn_accessibility": "ДА",
+            "option_ard": "ДА",
+        }],
+        "group_drafts": [{}],
+        "group_0_cabin_height_mm": "",
+        "group_0_mirror": "",
+        "group_0_firefighter_mode": "НЕТ",
+        "group_0_mgn_accessibility": False,
+        "group_0_option_ard": False,
+        section_key: "Двери",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    for field in ("cabin_height_mm", "mirror", "firefighter_mode"):
+        app._save_group_widget_value(0, field, f"group_0_{field}")
+    for field in ("mgn_accessibility", "option_ard"):
+        app._save_group_checkbox_value(0, field, f"group_0_{field}")
+
+    app._change_group_section(0, section_key)
+    for field in ("cabin_height_mm", "mirror", "firefighter_mode", "mgn_accessibility", "option_ard"):
+        session_state.pop(f"group_0_{field}")
+
+    defaults = app._group_defaults(0)
+    group = app._collect_group_from_state(0, defaults)
+    assert defaults["cabin_height_mm"] == ""
+    assert defaults["mirror"] == ""
+    assert defaults["firefighter_mode"] == "НЕТ"
+    assert defaults["mgn_accessibility"] == "НЕТ"
+    assert defaults["option_ard"] == "НЕТ"
+    assert "cabin_height_mm" not in group
+    assert "mirror" not in group
+    assert group["firefighter_mode"] == "НЕТ"
+    assert group["mgn_accessibility"] == "НЕТ"
+    assert "option_ard" not in group
+    assert session_state["group_0_active_section"] == "Двери"
+
+    session_state["group_0_cabin_height_mm"] = "2400"
+    session_state["group_0_option_ard"] = True
+    app._save_group_widget_value(0, "cabin_height_mm", "group_0_cabin_height_mm")
+    app._save_group_checkbox_value(0, "option_ard", "group_0_option_ard")
+    session_state.pop("group_0_cabin_height_mm")
+    session_state.pop("group_0_option_ard")
+    restored = app._collect_group_from_state(0, app._group_defaults(0))
+    assert restored["cabin_height_mm"] == "2400"
+    assert restored["option_ard"] == "ДА"
+
+
+def test_clearing_built_in_default_stays_cleared_after_switching_sections(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{}],
+        "group_0_fire_resistance": "",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._save_group_widget_value(0, "fire_resistance", "group_0_fire_resistance")
+    session_state.pop("group_0_fire_resistance")
+    assert app._group_defaults(0)["fire_resistance"] == ""
+    assert "fire_resistance" not in app._collect_group_from_state(0, app._group_defaults(0))
 
 
 def test_group_navigation_does_not_restore_stale_widget_value(monkeypatch) -> None:
@@ -2675,6 +2997,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
             "section": "A",
             "lift_type": "Грузопассажирский",
             "main_landing_floor": "1",
+            "skirting_finish": app.DEFAULT_SKIRTING_FINISH,
             "machine_room": "Без машинного помещения",
             "shaft_material": "Железобетон",
             "seismic": app.DEFAULT_SEISMIC,
@@ -2687,6 +3010,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
             "section": "C",
             "lift_type": "Грузопассажирский",
             "main_landing_floor": "1",
+            "skirting_finish": app.DEFAULT_SKIRTING_FINISH,
             "machine_room": "Без машинного помещения",
             "shaft_material": "Железобетон",
             "seismic": app.DEFAULT_SEISMIC,

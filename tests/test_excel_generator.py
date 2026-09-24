@@ -6,6 +6,7 @@ from io import BytesIO
 from zipfile import ZipFile
 
 import pytest
+from PIL import Image as PillowImage
 from openpyxl.cell.rich_text import CellRichText, TextBlock
 from openpyxl import load_workbook
 
@@ -518,7 +519,7 @@ def test_unselected_finishes_and_materials_are_blank_in_questionnaire(template_p
                 rear_wall_finish="Окрашенная сталь",
                 front_wall_finish="Ламинированная панель",
                 floor_finish="Керамогранит",
-                skirting_finish="Нет",
+                skirting_finish="НЕТ",
                 handrail_type="EX-FS01",
                 ceiling_type="EX-J135",
                 cop_type="EX-AC99A",
@@ -538,11 +539,53 @@ def test_unselected_finishes_and_materials_are_blank_in_questionnaire(template_p
     assert ws["C21"].value is None
     assert ws["C22"].value is None
     assert ws["C23"].value is None
-    assert ws["C24"].value == "Нет"
+    assert ws["C24"].value == "НЕТ"
     assert ws["C29"].value is None
     assert ws["C33"].value is None
     assert ws["C34"].value is None
     assert ws["C38"].value is None
+
+
+@pytest.mark.parametrize(
+    ("cabin_type", "walls"),
+    [
+        ("Проходная", "слева, справа"),
+        ("Непроходная", "слева, справа, на задней стене"),
+    ],
+)
+def test_handrail_walls_appear_in_questionnaire_and_summary(
+    template_path, mapping_path, cabin_type, walls
+):
+    material = "Шлифованная нержавеющая сталь EX-HS01"
+    group = LiftGroup(
+        lift_name="Л1",
+        quantity=1,
+        cabin_type=cabin_type,
+        handrail_type="EX-FS01",
+        handrail_finish=material,
+        handrail_walls=walls,
+    )
+
+    content = generate_questionnaire_xlsx(
+        template_path, Questionnaire(lift_groups=[group]), mapping_path
+    )
+    workbook = load_workbook(BytesIO(content))
+    expected = f"EX-FS01, {material}\nРасположение поручня: {walls}"
+
+    assert workbook.active["C22"].value == expected
+    required_lines = excel_generator._estimated_wrapped_lines(
+        expected, workbook.active.column_dimensions["C"].width
+    )
+    assert workbook.active.row_dimensions[22].height >= (
+        excel_generator.QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT * required_lines
+    )
+    summary = workbook["Саммэри"]
+    assert any(cell.value == f"EX-FS01\nРасположение поручня: {walls}" for row in summary for cell in row)
+    equipment_items = excel_generator._visual_summary_items(
+        group, excel_generator.EXCEL_EQUIPMENT_SUMMARY_FIELDS
+    )
+    handrail_item = next(item for item in equipment_items if item[0] == "Поручень")
+    assert handrail_item[2].name == "EX-FS01.png"
 
 
 def test_handrail_material_is_omitted_when_handrail_is_not_selected(template_path, mapping_path):
@@ -552,6 +595,7 @@ def test_handrail_material_is_omitted_when_handrail_is_not_selected(template_pat
         quantity=1,
         handrail_type=f"Без поручня, {material}",
         handrail_finish=material,
+        handrail_walls="слева, справа",
     )
     questionnaire = Questionnaire(lift_groups=[group])
 
@@ -1029,6 +1073,25 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     assert "<rowOff>152400</rowOff>" in drawing_xml
     assert "<colOff>676275</colOff>" in drawing_xml
     assert "<rowOff>238125</rowOff>" in drawing_xml
+
+def test_visual_summary_embeds_thumbnail_instead_of_full_size_panel(template_path, mapping_path):
+    panel_path = excel_generator.LOCAL_TEMPLATES / "COPHOP_photo" / "EX-AC55.png"
+    questionnaire = Questionnaire(
+        lift_groups=[LiftGroup(cop_type="EX-AC55")],
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    with ZipFile(BytesIO(content)) as archive:
+        media_files = [name for name in archive.namelist() if name.startswith("xl/media/")]
+        assert len(media_files) == 1
+        thumbnail = archive.read(media_files[0])
+
+    with PillowImage.open(BytesIO(thumbnail)) as embedded:
+        assert embedded.width <= 2 * 106
+        assert embedded.height <= 2 * 106
+    assert len(thumbnail) < panel_path.stat().st_size / 10
+    assert len(load_workbook(BytesIO(content))["Саммэри"]._images) == 1
+
 
 def test_visual_summary_sheet_can_be_omitted(template_path, mapping_path, tmp_path):
     template_with_summary = tmp_path / "template_with_summary.xlsx"
