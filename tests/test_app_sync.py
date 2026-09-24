@@ -373,13 +373,13 @@ def test_mirror_options_depend_on_cabin_type() -> None:
     regular = app._select_values(options, "mirror", cabin_type="Непроходная")
     through = app._select_values(options, "mirror", cabin_type="Проходная")
     assert len(regular) == 5  # Four rear-wall mirrors and "Нет".
-    assert len(through) == 9  # Four models on each side and "Нет".
+    assert len(through) == 13  # Four models in three side configurations and "Нет".
     assert set(regular) & set(through) == {"Нет"}
     assert all(app._mirror_side(value) for value in through if value != "Нет")
 
 
 @pytest.mark.parametrize("article", ["MEX-1", "MEX-2", "MEX-3", "MEX-4"])
-@pytest.mark.parametrize("side", ["слева", "справа"])
+@pytest.mark.parametrize("side", ["слева", "справа", "слева и справа"])
 def test_through_mirror_keeps_side_and_resolves_correct_photo(article, side) -> None:
     from src.excel_generator import _excel_image_path_for_value
 
@@ -390,6 +390,28 @@ def test_through_mirror_keeps_side_and_resolves_correct_photo(article, side) -> 
     assert _excel_image_path_for_value("mirror", value) == path
     with Image.open(path) as picture:
         picture.verify()
+
+
+@pytest.mark.parametrize("old_article,correct_article", [("MEX-1", "MEX-2"), ("MEX-2", "MEX-1")])
+def test_swapped_both_sides_mirror_preserves_saved_choice(old_article, correct_article) -> None:
+    from src.excel_generator import _excel_image_path_for_value
+
+    description = app.MIRROR_ARTICLE_DESCRIPTIONS[correct_article]
+    old_value = f"{old_article}, {description}, слева и справа"
+    new_value = f"{correct_article}, {description}, слева и справа"
+    assert app._normalize_select_option_value("mirror", old_value) == new_value
+    assert app._storage_value_for_option("mirror", old_value) == new_value
+    path = app._image_path_for_value("mirror", old_value)
+    assert path is not None and path.name == f"{new_value}.jpg"
+    assert _excel_image_path_for_value("mirror", old_value) == path
+
+
+@pytest.mark.parametrize("article", ["MEX-1", "MEX-2"])
+def test_one_sided_mirror_does_not_swap_article(article) -> None:
+    value = f"{article}, слева"
+    assert app._mirror_value_with_description(value) == (
+        f"{article}, {app.MIRROR_ARTICLE_DESCRIPTIONS[article]}, слева"
+    )
 
 
 @pytest.mark.parametrize("cabin_type,mirror", [

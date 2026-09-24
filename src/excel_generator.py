@@ -1184,6 +1184,12 @@ def _excel_image_path_for_value(option_key: str, value: Any) -> Path | None:
     if not normalized_value:
         return None
     image_files = _excel_image_files_for_key(option_key)
+    if option_key == "mirror" and normalized_value.endswith(", СЛЕВА И СПРАВА"):
+        # Keep the same mirror for drafts saved with swapped MEX-1/MEX-2 article numbers.
+        details = normalized_value.partition(",")[2]
+        for image_path in image_files:
+            if _normalized_file_article(image_path).partition(",")[2] == details:
+                return image_path
     for image_path in image_files:
         article = _normalized_file_article(image_path)
         if article == normalized_value or article.replace(" ", "-") == normalized_value:

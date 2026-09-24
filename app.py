@@ -3205,6 +3205,8 @@ def _select_values(
 
 
 def _normalize_select_option_value(option_key: str | None, value: Any) -> str:
+    if option_key == "mirror" and value not in ("", None, OTHER_OPTION):
+        return _mirror_value_with_description(str(value).strip())
     if option_key == "group_operation":
         return _normalize_group_operation(value) or ""
     if option_key == "shaft_material":
@@ -3428,14 +3430,20 @@ def _mirror_value_with_description(value: str) -> str:
     article = _mirror_article_from_value(value)
     if not article:
         return value
-    description = MIRROR_ARTICLE_DESCRIPTIONS.get(article)
     side = _mirror_side(value)
+    if side == "слева и справа" and article in {"MEX-1", "MEX-2"}:
+        # Earlier drafts had these two article numbers swapped; preserve the chosen image.
+        for correct_article in ("MEX-1", "MEX-2"):
+            if MIRROR_ARTICLE_DESCRIPTIONS[correct_article].casefold() in value.casefold():
+                article = correct_article
+                break
+    description = MIRROR_ARTICLE_DESCRIPTIONS.get(article)
     suffix = f", {side}" if side else ""
     return f"{article}, {description}{suffix}" if description else value
 
 
 def _mirror_side(value: Any) -> str | None:
-    match = re.search(r"\b(слева|справа)\b", str(value or ""), re.IGNORECASE)
+    match = re.search(r"\b(слева\s+и\s+справа|слева|справа)\b", str(value or ""), re.IGNORECASE)
     return match.group(1).lower() if match else None
 
 
@@ -3631,6 +3639,8 @@ def _apply_pending_widget_choice(key: str, group_index: int, field: str, default
 def _image_path_for_value(option_key: str, value: Any) -> Path | None:
     if value in ("", None, OTHER_OPTION):
         return None
+    if option_key == "mirror":
+        value = _mirror_value_with_description(str(value))
     normalized_value = _normalize_article_value(str(value))
     if not normalized_value:
         return None
