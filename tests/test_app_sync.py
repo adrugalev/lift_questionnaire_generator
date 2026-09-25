@@ -1437,7 +1437,7 @@ def test_lift_team_sidebar_uses_short_preparer_label(monkeypatch) -> None:
     app._render_lift_team_sidebar()
 
     assert len(rendered) == 1
-    assert '<div class="lift-team-sidebar-label">Заполняет:</div>' in rendered[0]
+    assert '<div class="lift-team-sidebar-label">Заполняет</div>' in rendered[0]
     assert '<div class="lift-team-sidebar-gap"></div>' in rendered[0]
     assert buttons == list(app.LIFT_TEAM_SURNAMES)
 

@@ -2075,7 +2075,7 @@ def _render_lift_team_sidebar() -> str | None:
             else ""
         )
         st.markdown(
-            '<div class="lift-team-sidebar-label">Заполняет:</div>'
+            '<div class="lift-team-sidebar-label">Заполняет</div>'
             '<div class="lift-team-sidebar-gap"></div>'
             f"{selected_style}",
             unsafe_allow_html=True,
