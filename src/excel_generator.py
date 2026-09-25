@@ -260,6 +260,8 @@ def generate_questionnaire_xlsx(
         if has_additional_other:
             shifted_mgn_row = mgn_accessibility_row + standard_options_count
             _shift_group_rows_after(group_rows, shifted_mgn_row, 1)
+    if not any(_is_yes_value(group.mgn_accessibility) for group in questionnaire.lift_groups):
+        worksheet.delete_rows(int(group_rows.pop("mgn_accessibility")))
     _ensure_factory_rows_order(worksheet)
     _clear_group_values(worksheet, first_group_col, group_count, group_rows, project_rows)
 
@@ -313,7 +315,7 @@ def _questionnaire_with_afp_materials(questionnaire: Questionnaire) -> Questionn
     for group in questionnaire.lift_groups:
         updates: dict[str, str] = {}
         for flag_field, material_fields in AFP_MATERIAL_FIELDS_BY_FLAG.items():
-            if not _afp_enabled(getattr(group, flag_field, None)):
+            if not _is_yes_value(getattr(group, flag_field, None)):
                 continue
             for material_field in material_fields:
                 value = getattr(group, material_field, None)
@@ -330,7 +332,7 @@ def _questionnaire_with_afp_materials(questionnaire: Questionnaire) -> Questionn
     return questionnaire.model_copy(update={"lift_groups": groups})
 
 
-def _afp_enabled(value: Any) -> bool:
+def _is_yes_value(value: Any) -> bool:
     if value is True:
         return True
     return str(value or "").strip().casefold() in {"да", "yes", "true", "1"}
@@ -520,6 +522,8 @@ def _questionnaire_cell_value(group: Any, field_name: str) -> Any:
     if _is_unselected_excel_value(value):
         return None
     if field_name in {"floor_indicator_type", "floor_indicator_finish"} and not _group_has_floor_indicator(group):
+        return None
+    if field_name == "mgn_accessibility" and not _is_yes_value(value):
         return None
     if field_name == QUESTIONNAIRE_MACHINE_ROOM_HEIGHT_FIELD and not _group_has_machine_room(group):
         return None
@@ -810,6 +814,7 @@ def _append_visual_summary(workbook, questionnaire: Questionnaire) -> None:
     ]
     groups_with_items = [item for item in groups_with_items if item[2] or item[3]]
     if not groups_with_items:
+        _remove_visual_summary_sheet(workbook)
         return
 
     worksheet = _create_visual_summary_sheet(workbook)
@@ -844,16 +849,14 @@ def _append_visual_summary(workbook, questionnaire: Questionnaire) -> None:
 
 
 def _create_visual_summary_sheet(workbook) -> Worksheet:
-    sheet_name = "Саммэри"
-    if sheet_name in workbook.sheetnames:
-        workbook.remove(workbook[sheet_name])
-    return workbook.create_sheet(sheet_name)
+    _remove_visual_summary_sheet(workbook)
+    return workbook.create_sheet("Отделка и оборудование")
 
 
 def _remove_visual_summary_sheet(workbook) -> None:
-    sheet_name = "Саммэри"
-    if sheet_name in workbook.sheetnames:
-        workbook.remove(workbook[sheet_name])
+    for sheet_name in ("Саммэри", "Отделка и оборудование"):
+        if sheet_name in workbook.sheetnames:
+            workbook.remove(workbook[sheet_name])
 
 
 def _setup_visual_summary_sheet(worksheet: Worksheet) -> None:

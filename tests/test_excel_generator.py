@@ -412,7 +412,7 @@ def test_preparer_is_written_below_project_name(template_path, mapping_path):
     rich_workbook = load_workbook(BytesIO(content), rich_text=True)
     questionnaire_ws = workbook.active
     rich_questionnaire_ws = rich_workbook.active
-    summary_ws = workbook["Саммэри"]
+    summary_ws = workbook["Отделка и оборудование"]
 
     assert questionnaire_ws["A1"].value == (
         "Проект: Тестовый проект\n"
@@ -465,7 +465,8 @@ def test_russian_and_chinese_columns_are_not_changed(template_path, mapping_path
         (before.cell(row=row, column=1).value, before.cell(row=row, column=2).value)
         for row in range(2, before.max_row + 1)
         if str(before.cell(row=row, column=1).value or "").strip()
-        and str(before.cell(row=row, column=1).value or "").strip() not in factory_labels
+        and str(before.cell(row=row, column=1).value or "").strip()
+        not in factory_labels | {"Доступность МГН"}
     ]
     content = generate_questionnaire_xlsx(template_path, _questionnaire(3), mapping_path)
     after = load_workbook(BytesIO(content)).active
@@ -587,7 +588,7 @@ def test_handrail_walls_appear_in_questionnaire_and_summary(
     assert workbook.active.row_dimensions[22].height >= (
         excel_generator.QUESTIONNAIRE_SINGLE_LINE_ROW_HEIGHT * required_lines
     )
-    summary = workbook["Саммэри"]
+    summary = workbook["Отделка и оборудование"]
     assert any(cell.value == f"EX-FS01\nРасположение поручня: {walls}" for row in summary for cell in row)
     equipment_items = excel_generator._visual_summary_items(
         group, excel_generator.EXCEL_EQUIPMENT_SUMMARY_FIELDS
@@ -817,6 +818,7 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
                 lift_name="Л1",
                 quantity=1,
                 additional_options="预留视频监控接口\nARD自动救援装置",
+                mgn_accessibility="ДА",
             )
         ],
     )
@@ -835,6 +837,23 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
     assert ws.cell(row=ard_row, column=2).value == "ARD自动救援装置"
     assert ws.cell(row=ard_row, column=3).value == "ДА"
     assert mgn_row == ard_row + 1
+    assert ws.cell(row=mgn_row, column=3).value == "ДА"
+
+
+def test_mgn_row_is_present_only_for_selected_lifts(template_path, mapping_path):
+    questionnaire = Questionnaire(
+        lift_groups=[
+            LiftGroup(lift_name="Л1", quantity=1, mgn_accessibility="НЕТ"),
+            LiftGroup(lift_name="Л2", quantity=1, mgn_accessibility="ДА"),
+        ],
+    )
+
+    content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
+    ws = load_workbook(BytesIO(content)).active
+    mgn_row = _row_for_label(ws, "Доступность МГН")
+
+    assert ws.cell(row=mgn_row, column=3).value is None
+    assert ws.cell(row=mgn_row, column=4).value == "ДА"
 
 
 def test_additional_options_other_is_written_only_when_filled(template_path, mapping_path):
@@ -860,16 +879,18 @@ def test_additional_options_other_is_written_only_when_filled(template_path, map
     ws = load_workbook(BytesIO(content)).active
     additional_row = _row_for_label(ws, "Дополнительные опции")
     ard_row = _row_for_label(ws, "ARD — Automatic Rescue Device")
-    mgn_row = _row_for_label(ws, "Доступность МГН")
     other_row = _row_for_label(ws, "Прочее")
 
     assert ard_row == additional_row + 1
-    assert mgn_row == ard_row + 1
-    assert other_row == mgn_row + 1
+    assert other_row == ard_row + 1
+    assert not any(
+        ws.cell(row=row, column=1).value == "Доступность МГН"
+        for row in range(1, ws.max_row + 1)
+    )
     assert ws.cell(row=other_row, column=2).value == "其他"
     assert ws.cell(row=other_row, column=3).value == "Особое исполнение кнопок\nпо заданию заказчика"
     assert ws.cell(row=other_row, column=4).value is None
-    assert ws.cell(row=other_row, column=1)._style == ws.cell(row=mgn_row, column=1)._style
+    assert ws.cell(row=other_row, column=1)._style == ws.cell(row=ard_row, column=1)._style
 
     empty_content = generate_questionnaire_xlsx(
         template_path,
@@ -880,6 +901,7 @@ def test_additional_options_other_is_written_only_when_filled(template_path, map
     labels = [empty_ws.cell(row=row, column=1).value for row in range(1, empty_ws.max_row + 1)]
 
     assert "Прочее" not in labels
+    assert "Доступность МГН" not in labels
 
 
 def test_additional_options_other_accepts_arbitrary_text():
@@ -1016,7 +1038,8 @@ def test_visual_summary_is_added_below_questionnaire(template_path, mapping_path
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     workbook = load_workbook(BytesIO(content))
     questionnaire_ws = workbook.active
-    ws = workbook["Саммэри"]
+    assert workbook.sheetnames[1] == "Отделка и оборудование"
+    ws = workbook["Отделка и оборудование"]
     questionnaire_values = [cell.value for row in questionnaire_ws.iter_rows() for cell in row if cell.value]
     values = [cell.value for row in ws.iter_rows() for cell in row if cell.value]
 
@@ -1109,13 +1132,14 @@ def test_visual_summary_embeds_thumbnail_instead_of_full_size_panel(template_pat
         assert embedded.width <= 2 * 106
         assert embedded.height <= 2 * 106
     assert len(thumbnail) < panel_path.stat().st_size / 10
-    assert len(load_workbook(BytesIO(content))["Саммэри"]._images) == 1
+    assert len(load_workbook(BytesIO(content))["Отделка и оборудование"]._images) == 1
 
 
 def test_visual_summary_sheet_can_be_omitted(template_path, mapping_path, tmp_path):
     template_with_summary = tmp_path / "template_with_summary.xlsx"
     workbook = load_workbook(template_path)
     workbook.create_sheet("Саммэри")
+    workbook.create_sheet("Отделка и оборудование")
     workbook.save(template_with_summary)
 
     content = generate_questionnaire_xlsx(
@@ -1125,4 +1149,19 @@ def test_visual_summary_sheet_can_be_omitted(template_path, mapping_path, tmp_pa
         include_summary_sheet=False,
     )
 
-    assert "Саммэри" not in load_workbook(BytesIO(content)).sheetnames
+    assert len(load_workbook(BytesIO(content)).sheetnames) == 1
+
+
+def test_visual_summary_replaces_legacy_sheet(template_path, mapping_path, tmp_path):
+    template_with_summary = tmp_path / "template_with_legacy_summary.xlsx"
+    workbook = load_workbook(template_path)
+    workbook.create_sheet("Саммэри")
+    workbook.save(template_with_summary)
+
+    content = generate_questionnaire_xlsx(
+        template_with_summary,
+        Questionnaire(lift_groups=[LiftGroup(lift_name="Л1", quantity=1, cop_type="EX-AC55")]),
+        mapping_path,
+    )
+
+    assert load_workbook(BytesIO(content)).sheetnames[1:] == ["Отделка и оборудование"]
