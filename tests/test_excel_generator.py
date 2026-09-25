@@ -33,6 +33,14 @@ def _questionnaire(groups: int) -> Questionnaire:
     )
 
 
+def _row_for_label(worksheet, label: str) -> int:
+    return next(
+        row
+        for row in range(1, worksheet.max_row + 1)
+        if worksheet.cell(row=row, column=1).value == label
+    )
+
+
 def test_first_group_goes_to_column_c(template_path, mapping_path):
     content = generate_questionnaire_xlsx(template_path, _questionnaire(1), mapping_path)
     ws = load_workbook(BytesIO(content)).active
@@ -140,16 +148,18 @@ def test_machine_room_height_row_is_inserted_only_when_filled(template_path, map
 
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
+    machine_room_row = _row_for_label(ws, "Машинное помещение")
+    height_row = _row_for_label(ws, "Высота машинного помещения, мм")
+    shaft_material_row = _row_for_label(ws, "Материал шахты")
 
-    assert ws["A44"].value == "Машинное помещение"
-    assert ws["A45"].value == "Высота машинного помещения, мм"
-    assert ws["B45"].value == "机房高度，毫米"
-    assert ws["C45"].value == 2600
-    assert ws["D45"].value is None
-    assert ws["A46"].value == "Материал шахты"
-    assert ws["C46"].value == "Железобетон"
-    assert ws["D46"].value == "Кирпичная"
-    assert ws["A45"]._style == ws["A46"]._style
+    assert height_row == machine_room_row + 1
+    assert shaft_material_row == height_row + 1
+    assert ws.cell(row=height_row, column=2).value == "机房高度，毫米"
+    assert ws.cell(row=height_row, column=3).value == 2600
+    assert ws.cell(row=height_row, column=4).value is None
+    assert ws.cell(row=shaft_material_row, column=3).value == "Железобетон"
+    assert ws.cell(row=shaft_material_row, column=4).value == "Кирпичная"
+    assert ws.cell(row=height_row, column=1)._style == ws.cell(row=shaft_material_row, column=1)._style
 
 
 def test_machine_room_height_row_is_omitted_when_not_filled(template_path, mapping_path):
@@ -169,7 +179,7 @@ def test_machine_room_height_row_is_omitted_when_not_filled(template_path, mappi
 
     labels = [ws.cell(row=row, column=1).value for row in range(1, ws.max_row + 1)]
     assert "Высота машинного помещения, мм" not in labels
-    assert ws["A45"].value == "Материал шахты"
+    assert _row_for_label(ws, "Материал шахты") == _row_for_label(ws, "Машинное помещение") + 1
 
 
 def test_machine_room_height_is_ignored_without_machine_room(template_path, mapping_path):
@@ -272,13 +282,9 @@ def test_absent_floor_indicator_is_not_written_to_questionnaire(template_path, m
 
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
-    indicator_row = next(
-        row
-        for row in range(1, ws.max_row + 1)
-        if ws.cell(row=row, column=1).value == "Индикация этажная"
-    )
 
-    assert ws.cell(row=indicator_row, column=3).value is None
+    labels = [ws.cell(row=row, column=1).value for row in range(1, ws.max_row + 1)]
+    assert "Индикация этажная" not in labels
 
 
 def test_questionnaire_reference_header_styles_are_applied(template_path, mapping_path):
@@ -457,15 +463,17 @@ def test_russian_and_chinese_columns_are_not_changed(template_path, mapping_path
     factory_labels = {"Стоимость", "Количество контейнеров"}
     labels_before = [
         (before.cell(row=row, column=1).value, before.cell(row=row, column=2).value)
-        for row in range(2, 54)
-        if str(before.cell(row=row, column=1).value or "").strip() not in factory_labels
+        for row in range(2, before.max_row + 1)
+        if str(before.cell(row=row, column=1).value or "").strip()
+        and str(before.cell(row=row, column=1).value or "").strip() not in factory_labels
     ]
     content = generate_questionnaire_xlsx(template_path, _questionnaire(3), mapping_path)
     after = load_workbook(BytesIO(content)).active
     labels_after = [
         (after.cell(row=row, column=1).value, after.cell(row=row, column=2).value)
-        for row in range(2, 56)
+        for row in range(2, after.max_row + 1)
         if str(after.cell(row=row, column=1).value or "").strip()
+        and str(after.cell(row=row, column=1).value or "").strip()
         not in factory_labels | {"Модель дверей", "Индикация этажная"}
     ]
     assert labels_after == labels_before
@@ -722,13 +730,17 @@ def test_signal_afp_does_not_duplicate_material_already_combined_with_equipment(
 
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
+    expected_values = {
+        f"EX-AC118A, {material} AFP",
+        f"EX-JC118B Touch, {material} AFP",
+        f"HBP-HD11, {material} AFP",
+    }
+    exported_values = {ws.cell(row=row, column=3).value for row in range(1, ws.max_row + 1)}
 
-    assert ws["C38"].value == f"EX-AC118A, {material} AFP"
-    assert ws["C41"].value == f"EX-JC118B Touch, {material} AFP"
-    assert ws["C42"].value == f"HBP-HD11, {material} AFP"
-    for cell in ("C38", "C41", "C42"):
-        assert ws[cell].value.count(material) == 1
-        assert ws[cell].value.count("AFP") == 1
+    assert expected_values <= exported_values
+    for value in expected_values:
+        assert value.count(material) == 1
+        assert value.count("AFP") == 1
 
 
 def test_afp_is_not_appended_to_non_stainless_materials(template_path, mapping_path):
@@ -770,9 +782,10 @@ def test_afp_is_not_appended_to_non_stainless_materials(template_path, mapping_p
     assert ws["C29"].value == painted
     assert ws["C33"].value == leather
     assert ws["C34"].value == f"{stainless} AFP"
-    assert ws["C38"].value == f"EX-AC99A, {painted}"
-    assert ws["C41"].value == f"EX-JC99A, {stainless} AFP"
-    assert ws["C42"].value == f"HBP-HD11, {veneer}"
+    exported_values = {ws.cell(row=row, column=3).value for row in range(1, ws.max_row + 1)}
+    assert f"EX-AC99A, {painted}" in exported_values
+    assert f"EX-JC99A, {stainless} AFP" in exported_values
+    assert f"HBP-HD11, {veneer}" in exported_values
 
 
 def test_cyrillic_finish_that_fits_one_line_keeps_single_row_height(template_path, mapping_path):
@@ -810,15 +823,18 @@ def test_additional_options_are_written_to_questionnaire(template_path, mapping_
 
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
+    additional_row = _row_for_label(ws, "Дополнительные опции")
+    cctv_row = _row_for_label(ws, "Подготовка под видеонаблюдение")
+    ard_row = _row_for_label(ws, "ARD — Automatic Rescue Device")
+    mgn_row = _row_for_label(ws, "Доступность МГН")
 
-    assert ws["A52"].value == "Дополнительные опции"
-    assert ws["A53"].value == "Подготовка под видеонаблюдение"
-    assert ws["B53"].value == "预留视频监控接口"
-    assert ws["C53"].value == "ДА"
-    assert ws["A54"].value == "ARD — Automatic Rescue Device"
-    assert ws["B54"].value == "ARD自动救援装置"
-    assert ws["C54"].value == "ДА"
-    assert ws["A55"].value == "Доступность МГН"
+    assert cctv_row == additional_row + 1
+    assert ws.cell(row=cctv_row, column=2).value == "预留视频监控接口"
+    assert ws.cell(row=cctv_row, column=3).value == "ДА"
+    assert ard_row == cctv_row + 1
+    assert ws.cell(row=ard_row, column=2).value == "ARD自动救援装置"
+    assert ws.cell(row=ard_row, column=3).value == "ДА"
+    assert mgn_row == ard_row + 1
 
 
 def test_additional_options_other_is_written_only_when_filled(template_path, mapping_path):
@@ -842,15 +858,18 @@ def test_additional_options_other_is_written_only_when_filled(template_path, map
 
     content = generate_questionnaire_xlsx(template_path, questionnaire, mapping_path)
     ws = load_workbook(BytesIO(content)).active
+    additional_row = _row_for_label(ws, "Дополнительные опции")
+    ard_row = _row_for_label(ws, "ARD — Automatic Rescue Device")
+    mgn_row = _row_for_label(ws, "Доступность МГН")
+    other_row = _row_for_label(ws, "Прочее")
 
-    assert ws["A52"].value == "Дополнительные опции"
-    assert ws["A53"].value == "ARD — Automatic Rescue Device"
-    assert ws["A54"].value == "Доступность МГН"
-    assert ws["A55"].value == "Прочее"
-    assert ws["B55"].value == "其他"
-    assert ws["C55"].value == "Особое исполнение кнопок\nпо заданию заказчика"
-    assert ws["D55"].value is None
-    assert ws["A55"]._style == ws["A54"]._style
+    assert ard_row == additional_row + 1
+    assert mgn_row == ard_row + 1
+    assert other_row == mgn_row + 1
+    assert ws.cell(row=other_row, column=2).value == "其他"
+    assert ws.cell(row=other_row, column=3).value == "Особое исполнение кнопок\nпо заданию заказчика"
+    assert ws.cell(row=other_row, column=4).value is None
+    assert ws.cell(row=other_row, column=1)._style == ws.cell(row=mgn_row, column=1)._style
 
     empty_content = generate_questionnaire_xlsx(
         template_path,

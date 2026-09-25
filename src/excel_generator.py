@@ -231,7 +231,8 @@ def generate_questionnaire_xlsx(
         raise ExcelGenerationError("Нужна хотя бы одна группа лифтов.")
 
     _ensure_door_model_row(worksheet, group_rows)
-    _ensure_floor_indicator_row(worksheet, group_rows)
+    if _questionnaire_has_floor_indicator(questionnaire):
+        _ensure_floor_indicator_row(worksheet, group_rows)
     if _questionnaire_has_machine_room_height(questionnaire):
         _insert_machine_room_height_row(worksheet, group_rows)
     _prepare_group_columns(worksheet, first_group_col, group_count)
@@ -1338,6 +1339,10 @@ def _group_has_floor_indicator(group: Any) -> bool:
     if _is_unselected_excel_value(value):
         return False
     return str(value).strip().casefold() != "нет"
+
+
+def _questionnaire_has_floor_indicator(questionnaire: Questionnaire) -> bool:
+    return any(_group_has_floor_indicator(group) for group in questionnaire.lift_groups)
 
 
 def _insert_machine_room_height_row(worksheet: Worksheet, group_rows: dict[str, int]) -> None:

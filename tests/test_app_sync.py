@@ -1095,6 +1095,7 @@ def test_changing_quantity_updates_current_range_and_following_group(monkeypatch
     assert session_state.group_drafts[0]["lift_name"] == "Л1-Л3"
     assert session_state["group_1_lift_name"] == "Л4"
     assert session_state.prefill_groups[1]["lift_name"] == "Л4"
+    assert app._project_summary_from_state()["lift_count"] == 4
 
 
 def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
@@ -2001,6 +2002,75 @@ def test_floor_indicator_defaults_to_no_without_material(monkeypatch) -> None:
 
     assert defaults["floor_indicator_type"] == app.DEFAULT_FLOOR_INDICATOR_TYPE == "НЕТ"
     assert "floor_indicator_finish" not in defaults
+
+
+def test_floor_indicator_finish_is_cleared_when_indicator_is_no(monkeypatch) -> None:
+    material = "Шлифованная нержавеющая сталь EX-HS01"
+    session_state = FakeSessionState({
+        "prefill_groups": [{"floor_indicator_finish": material}],
+        "group_drafts": [{"floor_indicator_finish": material}],
+        "group_0_floor_indicator_type": "НЕТ",
+        "group_0_floor_indicator_finish": material,
+        "group_0_floor_indicator_finish_pending_choice": material,
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    app._save_group_widget_value(0, "floor_indicator_type", "group_0_floor_indicator_type")
+
+    assert "floor_indicator_finish" not in session_state.prefill_groups[0]
+    assert "floor_indicator_finish" not in session_state.group_drafts[0]
+    assert "group_0_floor_indicator_finish" not in session_state
+    assert "group_0_floor_indicator_finish_pending_choice" not in session_state
+
+
+def test_floor_indicator_finish_select_is_disabled_when_indicator_is_no(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{}],
+        "group_0_floor_indicator_type": "НЕТ",
+    })
+    captured = {}
+
+    class FakeOptions:
+        def get(self, _option_key: str) -> list[str]:
+            return []
+
+    def fake_image_select_widget(*args, **kwargs):
+        captured["disabled"] = kwargs["disabled"]
+        return ""
+
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(app, "_has_image_options", lambda _option_key: True)
+    monkeypatch.setattr(app, "_image_select_widget", fake_image_select_widget)
+
+    result = app._field_widget(
+        "Материал индикации этажной",
+        "select",
+        "group_0_floor_indicator_finish",
+        None,
+        FakeOptions(),
+        "signal_steel_finish",
+        0,
+        "floor_indicator_finish",
+    )
+
+    assert result is None
+    assert captured["disabled"] is True
+
+
+def test_basic_section_uses_full_app_render_for_live_summary(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "active_group_index": 0,
+        "group_0_active_section": "Основные",
+    })
+    calls = []
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(app, "_render_active_group_form_content", lambda _options: calls.append("app"))
+    monkeypatch.setattr(app, "_render_active_group_form_fragment", lambda _options: calls.append("fragment"))
+
+    app._render_active_group_form(object())
+
+    assert calls == ["app"]
 
 
 def test_group_defaults_use_ei60_fire_resistance(monkeypatch) -> None:

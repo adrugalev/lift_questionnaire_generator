@@ -2327,10 +2327,30 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     return nav_groups
 
 
-@st.fragment
 def _render_active_group_form(options: OptionsManager) -> None:
+    index = int(st.session_state.active_group_index)
+    active_section_key = f"group_{index}_active_section"
+    section_names = list(FIELD_GROUPS.keys())
+    active_section = (
+        _normalize_group_section_name(st.session_state.get(active_section_key))
+        or section_names[0]
+    )
+    if active_section == section_names[0]:
+        st.session_state.pop("group_field_app_refresh_requested", None)
+        _render_active_group_form_content(options)
+        return
+    _render_active_group_form_fragment(options)
+
+
+@st.fragment
+def _render_active_group_form_fragment(options: OptionsManager) -> None:
     if st.session_state.pop("group_field_app_refresh_requested", False):
         st.rerun(scope="app")
+
+    _render_active_group_form_content(options)
+
+
+def _render_active_group_form_content(options: OptionsManager) -> None:
 
     index = int(st.session_state.active_group_index)
     defaults = _group_defaults(index)
@@ -3269,6 +3289,10 @@ def _field_widget(
         )
         return "ДА" if checked else "НЕТ"
     if kind == "select" and option_key:
+        disabled = field == "floor_indicator_finish" and not _floor_indicator_is_selected(group_index)
+        if disabled:
+            _clear_floor_indicator_finish(group_index)
+            default = None
         default = _normalize_select_option_value(option_key, default)
         cabin_type = _group_defaults(group_index).get("cabin_type")
         if option_key == "mirror":
@@ -3303,6 +3327,7 @@ def _field_widget(
                 option_key,
                 group_index,
                 field,
+                disabled=disabled,
             )
         else:
             selected = st.selectbox(
@@ -3310,6 +3335,7 @@ def _field_widget(
                 values,
                 index=index,
                 key=key,
+                disabled=disabled,
                 on_change=_save_group_widget_value_from_fragment,
                 args=(group_index, field, key),
             )
@@ -3463,6 +3489,8 @@ def _image_select_widget(
     option_key: str,
     group_index: int,
     field: str,
+    *,
+    disabled: bool = False,
 ) -> Any:
     st.markdown(f'<div class="image-picker-label">{html.escape(label)}</div>', unsafe_allow_html=True)
     show_inline_preview = option_key in INLINE_PREVIEW_OPTION_KEYS
@@ -3476,6 +3504,7 @@ def _image_select_widget(
             values,
             index=index,
             key=key,
+            disabled=disabled,
             label_visibility="collapsed",
             on_change=_save_group_widget_value_from_fragment,
             args=(group_index, field, key),
@@ -3485,7 +3514,7 @@ def _image_select_widget(
             preview_path = _image_path_for_value(option_key, selected)
             st.markdown(_image_preview_html(preview_path, key, selected), unsafe_allow_html=True)
     with picker_col:
-        _image_option_picker(label, option_key, key, group_index, field)
+        _image_option_picker(label, option_key, key, group_index, field, disabled=disabled)
     return selected
 
 
@@ -3727,12 +3756,20 @@ def _natural_sort_key(value: str) -> list[Any]:
     return [int(part) if part.isdigit() else part.lower() for part in re.split(r"(\d+)", value)]
 
 
-def _image_option_picker(label: str, option_key: str, key: str, group_index: int, field: str) -> None:
+def _image_option_picker(
+    label: str,
+    option_key: str,
+    key: str,
+    group_index: int,
+    field: str,
+    *,
+    disabled: bool = False,
+) -> None:
     image_options = _image_options_for_key(option_key)
     if not image_options:
         return
 
-    if st.button("Фото", key=f"{key}_photo_open", use_container_width=True):
+    if st.button("Фото", key=f"{key}_photo_open", disabled=disabled, use_container_width=True):
         _image_picker_dialog(label, option_key, key, group_index, field)
 
 
@@ -3956,9 +3993,7 @@ def _save_group_widget_value(group_index: int, field: str, key: str) -> None:
         stops_value = _stops_for_group(group_index, draft)
         _apply_stops_derived_fields(group_index, stops_value)
     if field == "floor_indicator_type" and _is_no_finish_required_value(value):
-        finish_field = SIGNAL_FINISH_FIELDS[field]
-        draft.pop(finish_field, None)
-        st.session_state.pop(f"group_{group_index}_{finish_field}", None)
+        _clear_floor_indicator_finish(group_index)
     if field in {"lift_name", "quantity"}:
         _sync_group_lift_name_range_in_state(group_index)
         _renumber_following_group_lift_names_in_state(group_index)
@@ -3973,6 +4008,8 @@ def _change_group_section(group_index: int, section_widget_key: str) -> None:
     section = _normalize_group_section_name(st.session_state.get(section_widget_key))
     if section:
         st.session_state[f"group_{group_index}_active_section"] = section
+        if section == next(iter(FIELD_GROUPS)):
+            st.session_state.group_field_app_refresh_requested = True
 
 
 def _save_group_custom_value(group_index: int, field: str, key: str) -> None:
@@ -4024,6 +4061,22 @@ def _truthy_yes_no(value: Any) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().upper() in {"ДА", "YES", "TRUE", "1"}
+
+
+def _floor_indicator_is_selected(group_index: int) -> bool:
+    key = f"group_{group_index}_floor_indicator_type"
+    value = st.session_state.get(key, _group_defaults(group_index).get("floor_indicator_type"))
+    return not _is_no_finish_required_value(value)
+
+
+def _clear_floor_indicator_finish(group_index: int) -> None:
+    field = "floor_indicator_finish"
+    _ensure_group_draft(group_index).pop(field, None)
+    if group_index < len(st.session_state.prefill_groups):
+        st.session_state.prefill_groups[group_index].pop(field, None)
+    key = f"group_{group_index}_{field}"
+    st.session_state.pop(key, None)
+    st.session_state.pop(f"{key}_pending_choice", None)
 
 
 def _afp_checkbox_is_available(group_index: int, flag_field: str) -> bool:
