@@ -269,11 +269,13 @@ STRICT_SELECT_OPTION_KEYS = {
     "cop_type",
     "door_model",
     "floor_indicator_type",
+    "lift_type",
     "lop_type",
     "seismic",
 }
 SELECT_WITHOUT_EMPTY_FIELDS = {
     "door_model",
+    "lift_type",
     "skirting_finish",
 }
 SELECT_WITHOUT_CUSTOM_FIELDS = {
@@ -364,7 +366,8 @@ SPEED_OPTIONS_MS = [
     "5",
     "6",
 ]
-DEFAULT_LIFT_TYPE = "Грузопассажирский"
+LIFT_TYPE_OPTIONS = ("Пассажирский", "Грузовой")
+DEFAULT_LIFT_TYPE = LIFT_TYPE_OPTIONS[0]
 DEFAULT_MAIN_LANDING_FLOOR = "1"
 DEFAULT_MACHINE_ROOM = "Без машинного помещения"
 MACHINE_ROOM_WITH_VALUE = "С машинным помещением"
@@ -665,7 +668,7 @@ def _random_test_groups(options: OptionsManager) -> list[dict[str, Any]]:
             "ceiling_type": _random_select_value(options, "ceiling_type") or "EX-J135",
             "ceiling_finish": ceiling_finish,
             "skirting_finish": wall_finish,
-            "mirror": _random_select_value(options, "mirror", cabin_type=cabin_type) or "Нет",
+            "mirror": _random_select_value(options, "mirror", cabin_type=cabin_type) or "НЕТ",
             "door_opening_type": random.choice(["Телескопическое", "Центральное"]),
             "door_model": DEFAULT_DOOR_MODEL,
             "cabin_door_finish": wall_finish,
@@ -1020,6 +1023,12 @@ def _filled_field_styles_css() -> str:
             line-height: 1.25 !important;
             white-space: normal !important;
             overflow-wrap: anywhere !important;
+        }
+
+        .st-key-lift_management div[data-testid="stButton"] button span[data-testid="stIconMaterial"] {
+            flex-shrink: 0 !important;
+            font-size: 1.1rem !important;
+            line-height: 1 !important;
         }
 
         div[data-testid="stElementContainer"]:has(.group-nav-button-marker) {
@@ -2290,20 +2299,27 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     with st.container(key="lift_management"):
         header_cols = st.columns(4, gap="small")
         with header_cols[0]:
-            if st.button("Добавить лифт", use_container_width=True):
+            if st.button("Добавить лифт", icon=":material/add_circle_outline:", use_container_width=True):
                 _add_group()
                 st.rerun()
         with header_cols[1]:
-            if st.button("Копировать лифт", help="Создать копию выбранного лифта", use_container_width=True):
+            if st.button(
+                "Копировать лифт", icon=":material/content_copy:",
+                help="Создать копию выбранного лифта", use_container_width=True,
+            ):
                 _copy_group(int(st.session_state.active_group_index))
                 st.rerun()
         with header_cols[2]:
-            if st.button("Удалить лифт", help="Удалить выбранный лифт", use_container_width=True):
+            if st.button(
+                "Удалить лифт", icon=":material/delete_outline:",
+                help="Удалить выбранный лифт", use_container_width=True,
+            ):
                 _delete_group(int(st.session_state.active_group_index))
                 st.rerun()
         with header_cols[3]:
             if st.button(
                 "Перенести отделки и опции",
+                icon=":material/move_up:",
                 help="Перенести отделки и опции выбранного лифта во все остальные лифты",
                 disabled=st.session_state.group_count <= 1,
                 use_container_width=True,
@@ -3095,7 +3111,7 @@ def _group_defaults(index: int) -> dict[str, Any]:
     merged.update(draft)
     if merged.get("group_operation") not in ("", None):
         merged["group_operation"] = _normalize_group_operation(merged["group_operation"])
-    merged.setdefault("lift_type", DEFAULT_LIFT_TYPE)
+    merged["lift_type"] = _normalize_lift_type(merged.get("lift_type"))
     merged.setdefault("main_landing_floor", DEFAULT_MAIN_LANDING_FLOOR)
     merged.setdefault("machine_room", DEFAULT_MACHINE_ROOM)
     merged["shaft_material"] = _normalize_shaft_material(merged.get("shaft_material")) or DEFAULT_SHAFT_MATERIAL
@@ -3306,7 +3322,7 @@ def _field_widget(
         if allows_custom:
             values.append(OTHER_OPTION)
         state_value = st.session_state.get(key)
-        if state_value not in (None, ""):
+        if state_value not in (None, "") or (option_key == "lift_type" and key in st.session_state):
             normalized_state_value = _normalize_select_option_value(option_key, state_value)
             if normalized_state_value != state_value:
                 state_value = normalized_state_value
@@ -3412,6 +3428,8 @@ def _select_values(
     options: OptionsManager, option_key: str, field: str | None = None,
     *, cabin_type: str | None = None,
 ) -> list[str]:
+    if option_key == "lift_type":
+        return list(LIFT_TYPE_OPTIONS)
     image_values = list(_image_options_for_key(option_key).keys())
     manual_values = MANUAL_OPTION_VALUES.get(option_key, []) + MANUAL_FIELD_OPTION_VALUES.get(field or "", [])
     configured_values = options.get(option_key)
@@ -3426,6 +3444,8 @@ def _select_values(
 
 
 def _normalize_select_option_value(option_key: str | None, value: Any) -> str:
+    if option_key == "lift_type":
+        return _normalize_lift_type(value)
     if option_key == "mirror" and value not in ("", None, OTHER_OPTION):
         return _mirror_value_with_description(str(value).strip())
     if option_key == "group_operation":
@@ -3435,6 +3455,10 @@ def _normalize_select_option_value(option_key: str | None, value: Any) -> str:
     if option_key == "seismic":
         return _normalize_seismic(value) or ""
     return str(value)
+
+
+def _normalize_lift_type(value: Any) -> str:
+    return "Грузовой" if str(value or "").strip().casefold() == "грузовой" else DEFAULT_LIFT_TYPE
 
 
 def _normalize_group_operation(value: Any) -> str | None:
@@ -3644,6 +3668,8 @@ def _floor_name_for_article(article: str) -> str | None:
 
 
 def _storage_value_for_option(option_key: str | None, value: Any) -> Any:
+    if option_key == "lift_type":
+        return _normalize_lift_type(value)
     if option_key == "seismic":
         return _normalize_seismic(value)
     if option_key == "mirror" and value not in ("", None, OTHER_OPTION):
@@ -3656,6 +3682,8 @@ def _storage_value_for_option(option_key: str | None, value: Any) -> Any:
 
 
 def _mirror_value_with_description(value: str) -> str:
+    if value.strip().casefold() == "нет":
+        return "НЕТ"
     article = _mirror_article_from_value(value)
     if not article:
         return value

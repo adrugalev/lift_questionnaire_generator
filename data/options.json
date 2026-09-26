@@ -1,5 +1,5 @@
 {
-  "lift_type": ["Пассажирский", "Грузопассажирский", "Грузовой"],
+  "lift_type": ["Пассажирский", "Грузовой"],
   "group_operation": ["Одиночная", "Групповая", "DDS"],
   "cabin_type": ["Непроходная", "Проходная"],
   "finish": [
@@ -11,7 +11,7 @@
   "floor_finish": [],
   "handrail_type": ["EX-FS01", "EX-FS02", "Без поручня"],
   "ceiling_type": ["EX-J135", "EX-J136"],
-  "mirror": ["Нет"],
+  "mirror": ["НЕТ"],
   "door_opening_type": ["Телескопическое", "Центральное"],
   "door_model": ["NBSL", "Fermator", "Fermator Premium"],
   "fire_resistance": ["Нет", "EI-30", "EI-60", "EI-90"],

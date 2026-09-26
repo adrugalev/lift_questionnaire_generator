@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-APP_VERSION_DATE = "25.09.2026"
+APP_VERSION_DATE = "26.09.2026"
 # Дневной счетчик версии: при смене APP_VERSION_DATE начинается с 1.
-APP_VERSION_REVISION = 4
+APP_VERSION_REVISION = 3
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,27 @@ class VersionHistoryEntry:
 
 
 APP_VERSION_HISTORY = (
+    VersionHistoryEntry(
+        revision=3,
+        date="26.09.2026",
+        changes=(
+            "Кнопкам управления лифтами добавлены значки добавления, копирования, удаления и переноса отделок и опций.",
+        ),
+    ),
+    VersionHistoryEntry(
+        revision=2,
+        date="26.09.2026",
+        changes=(
+            "В выборе зеркала вариант «НЕТ» написан прописными буквами, включая старые черновики.",
+        ),
+    ),
+    VersionHistoryEntry(
+        revision=1,
+        date="26.09.2026",
+        changes=(
+            "В типе лифта доступны только «Пассажирский» и «Грузовой»; старые значения приведены к «Пассажирскому».",
+        ),
+    ),
     VersionHistoryEntry(
         revision=4,
         date="25.09.2026",

@@ -392,10 +392,10 @@ def test_mirror_options_depend_on_cabin_type() -> None:
     options = app.OptionsManager(app.OPTIONS_PATH)
     regular = app._select_values(options, "mirror", cabin_type="Непроходная")
     through = app._select_values(options, "mirror", cabin_type="Проходная")
-    assert len(regular) == 5  # Four rear-wall mirrors and "Нет".
-    assert len(through) == 13  # Four models in three side configurations and "Нет".
-    assert set(regular) & set(through) == {"Нет"}
-    assert all(app._mirror_side(value) for value in through if value != "Нет")
+    assert len(regular) == 5  # Four rear-wall mirrors and "НЕТ".
+    assert len(through) == 13  # Four models in three side configurations and "НЕТ".
+    assert set(regular) & set(through) == {"НЕТ"}
+    assert all(app._mirror_side(value) for value in through if value != "НЕТ")
 
 
 @pytest.mark.parametrize("article", ["MEX-1", "MEX-2", "MEX-3", "MEX-4"])
@@ -432,6 +432,11 @@ def test_one_sided_mirror_does_not_swap_article(article) -> None:
     assert app._mirror_value_with_description(value) == (
         f"{article}, {app.MIRROR_ARTICLE_DESCRIPTIONS[article]}, слева"
     )
+
+
+def test_old_no_mirror_value_uses_uppercase_label_and_storage() -> None:
+    assert app._normalize_select_option_value("mirror", "Нет") == "НЕТ"
+    assert app._storage_value_for_option("mirror", "Нет") == "НЕТ"
 
 
 @pytest.mark.parametrize("cabin_type,mirror", [
@@ -686,15 +691,17 @@ def test_legacy_group_operation_values_are_normalized_for_export() -> None:
     assert app._prepare_group_for_model({"group_operation": "Групповое"})["group_operation"] == "Групповая"
 
 
-def test_lift_type_options_exclude_hospital_and_custom_choice(monkeypatch) -> None:
+def test_lift_type_options_only_include_passenger_and_freight(monkeypatch) -> None:
     class FakeOptions:
         def get(self, option_key: str) -> list[str]:
             return ["Пассажирский", "Грузопассажирский", "Грузовой", "Больничный"]
 
     monkeypatch.setattr(app, "_image_options_for_key", lambda option_key: {})
 
-    assert app._select_values(FakeOptions(), "lift_type") == ["Пассажирский", "Грузопассажирский", "Грузовой"]
+    assert app._select_values(FakeOptions(), "lift_type") == ["Пассажирский", "Грузовой"]
     assert "lift_type" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
+    assert "lift_type" in app.SELECT_WITHOUT_EMPTY_FIELDS
+    assert "lift_type" in app.STRICT_SELECT_OPTION_KEYS
 
 
 def test_cabin_type_has_no_custom_choice(monkeypatch) -> None:
@@ -821,7 +828,7 @@ def test_mirror_options_keep_photo_items_and_disable_custom_choice(monkeypatch, 
     assert app._select_values(FakeOptions(), "mirror") == [
         "MEX-1, в неполную ширину до поручня",
         "MEX-2, в неполную ширину и неполную высоту",
-        "Нет",
+        "НЕТ",
     ]
     assert "mirror" in app.SELECT_WITHOUT_CUSTOM_OPTION_KEYS
 
@@ -1868,7 +1875,7 @@ def test_dialog_image_tile_html_uses_fixed_tile_classes(tmp_path) -> None:
     assert "Шлифованная нержавеющая сталь EX-HS01" in tile
 
 
-def test_group_defaults_use_freight_passenger_lift_type(monkeypatch) -> None:
+def test_group_defaults_use_passenger_lift_type(monkeypatch) -> None:
     session_state = FakeSessionState({
         "prefill_groups": [{}],
         "group_drafts": [{}],
@@ -1876,7 +1883,7 @@ def test_group_defaults_use_freight_passenger_lift_type(monkeypatch) -> None:
 
     monkeypatch.setattr(app.st, "session_state", session_state)
 
-    assert app._group_defaults(0)["lift_type"] == "Грузопассажирский"
+    assert app._group_defaults(0)["lift_type"] == "Пассажирский"
 
 
 def test_group_defaults_keep_existing_lift_type(monkeypatch) -> None:
@@ -1888,6 +1895,41 @@ def test_group_defaults_keep_existing_lift_type(monkeypatch) -> None:
     monkeypatch.setattr(app.st, "session_state", session_state)
 
     assert app._group_defaults(0)["lift_type"] == "Пассажирский"
+
+
+def test_legacy_lift_type_is_normalized_when_restoring_group(monkeypatch) -> None:
+    session_state = FakeSessionState({
+        "prefill_groups": [{"lift_type": "Грузопассажирский"}],
+        "group_drafts": [{}],
+        "group_0_lift_type": "Грузопассажирский",
+    })
+    monkeypatch.setattr(app.st, "session_state", session_state)
+
+    assert app._group_defaults(0)["lift_type"] == "Пассажирский"
+    assert app._collect_group_from_state(0, app._group_defaults(0))["lift_type"] == "Пассажирский"
+    assert session_state["group_drafts"][0]["lift_type"] == "Пассажирский"
+    assert app._normalize_select_option_value("lift_type", "Грузовой") == "Грузовой"
+
+
+def test_blank_saved_lift_type_widget_uses_passenger_choice(monkeypatch) -> None:
+    key = "group_0_lift_type"
+    session_state = FakeSessionState({
+        "prefill_groups": [{}],
+        "group_drafts": [{}],
+        key: "",
+    })
+    captured = {}
+
+    def fake_selectbox(label, values, **kwargs):
+        captured.update({"label": label, "values": values, **kwargs})
+        return values[kwargs["index"]]
+
+    monkeypatch.setattr(app.st, "session_state", session_state)
+    monkeypatch.setattr(app.st, "selectbox", fake_selectbox)
+
+    assert app._field_widget("Тип лифта", "select", key, "Пассажирский", object(), "lift_type", 0, "lift_type") == "Пассажирский"
+    assert captured["values"] == ["Пассажирский", "Грузовой"]
+    assert session_state[key] == "Пассажирский"
 
 
 def test_group_defaults_use_first_main_landing_floor(monkeypatch) -> None:
@@ -3065,7 +3107,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
     assert session_state["group_drafts"] == [
         {
             "section": "A",
-            "lift_type": "Грузопассажирский",
+            "lift_type": "Пассажирский",
             "main_landing_floor": "1",
             "skirting_finish": app.DEFAULT_SKIRTING_FINISH,
             "machine_room": "Без машинного помещения",
@@ -3078,7 +3120,7 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
         },
         {
             "section": "C",
-            "lift_type": "Грузопассажирский",
+            "lift_type": "Пассажирский",
             "main_landing_floor": "1",
             "skirting_finish": app.DEFAULT_SKIRTING_FINISH,
             "machine_room": "Без машинного помещения",
@@ -3092,8 +3134,8 @@ def test_delete_group_reindexes_remaining_groups(monkeypatch) -> None:
     ]
     assert session_state["group_0_section"] == "A"
     assert session_state["group_1_section"] == "C"
-    assert session_state["group_0_lift_type"] == "Грузопассажирский"
-    assert session_state["group_1_lift_type"] == "Грузопассажирский"
+    assert session_state["group_0_lift_type"] == "Пассажирский"
+    assert session_state["group_1_lift_type"] == "Пассажирский"
     assert session_state["group_0_main_landing_floor"] == "1"
     assert session_state["group_1_main_landing_floor"] == "1"
     assert session_state["group_0_machine_room"] == "Без машинного помещения"
