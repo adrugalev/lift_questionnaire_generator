@@ -1031,6 +1031,13 @@ def _filled_field_styles_css() -> str:
             line-height: 1 !important;
         }
 
+        div.st-key-confirm_delete_lift div[data-testid="stButton"] button[kind="primary"],
+        div.st-key-confirm_delete_lift div[data-testid="stButton"] button[kind="primary"]:hover {
+            background-color: #c0392b !important;
+            border-color: #c0392b !important;
+            color: #ffffff !important;
+        }
+
         div[data-testid="stElementContainer"]:has(.group-nav-button-marker) {
             height: 0 !important;
             margin: 0 !important;
@@ -1805,6 +1812,8 @@ def _browser_autosave_candidate(loaded_record: dict[str, Any]) -> dict[str, Any]
 
 
 def _process_browser_autosave_restore() -> None:
+    if st.session_state.get("pending_delete_group_index") is not None:
+        return
     if st.session_state.get("browser_autosave_checked"):
         return
     loaded_record = _browser_autosave_loaded_record()
@@ -2295,6 +2304,9 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     _normalize_group_lists()
     _sync_group_lift_name_ranges_before_render()
     _clamp_active_group_selection()
+    pending_delete_index = st.session_state.get("pending_delete_group_index")
+    if pending_delete_index is not None:
+        _confirm_delete_group(int(pending_delete_index))
 
     with st.container(key="lift_management"):
         header_cols = st.columns(4, gap="small")
@@ -2314,8 +2326,7 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
                 "Удалить лифт", icon=":material/delete_outline:",
                 help="Удалить выбранный лифт", use_container_width=True,
             ):
-                _delete_group(int(st.session_state.active_group_index))
-                st.rerun()
+                _request_delete_group(int(st.session_state.active_group_index))
         with header_cols[3]:
             if st.button(
                 "Перенести отделки и опции",
@@ -2341,6 +2352,63 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
 
     _render_active_group_form(options)
     return nav_groups
+
+
+def _request_delete_group(index: int) -> None:
+    if 0 <= index < st.session_state.group_count:
+        st.session_state.pending_delete_group_index = index
+        st.rerun()
+
+
+def _dismiss_delete_group_dialog() -> None:
+    st.session_state.pop("pending_delete_group_index", None)
+
+
+@st.dialog("Подтверждение удаления", on_dismiss=_dismiss_delete_group_dialog)
+def _confirm_delete_group(index: int) -> None:
+    if index < 0 or index >= st.session_state.group_count:
+        st.session_state.pop("pending_delete_group_index", None)
+        st.warning("Этот лифт уже недоступен.")
+        return
+
+    group = _collect_group_from_state(index, _group_defaults(index))
+    label = _format_group_display_label(
+        group.get("lift_name"), group.get("quantity"), group.get("capacity_kg"),
+    ) or _append_capacity_to_group_label(f"Лифт {index + 1}", group.get("capacity_kg"))
+    quantity = _parse_positive_int_silent(group.get("quantity"))
+    details: list[str] = []
+    if group.get("section"):
+        details.append(str(group["section"]))
+    if quantity is not None:
+        details.append(f"{quantity} {_lift_noun(quantity)}")
+    speed = _format_decimal_option(group.get("speed_ms")).replace(".", ",")
+    if speed:
+        details.append(f"Скорость: {speed} м/с")
+    stops = _parse_positive_int_silent(group.get("stops"))
+    if stops is not None:
+        details.append(f"Остановок: {stops}")
+
+    st.write("Вы точно хотите удалить лифт?")
+    st.markdown(f"**{label}**")
+    st.caption(" · ".join(details) if details else "Параметры лифта ещё не заполнены.")
+    if quantity is not None and quantity > 1:
+        st.warning(f"Будет удалена вся группа: {quantity} {_lift_noun(quantity)}.")
+    if st.session_state.group_count == 1:
+        st.caption("Данные единственного лифта будут очищены; пустая форма останется.")
+
+    cancel_col, confirm_col = st.columns(2)
+    with cancel_col:
+        if st.button("Отмена", key="cancel_delete_lift", use_container_width=True):
+            st.session_state.pop("pending_delete_group_index", None)
+            st.rerun()
+    with confirm_col:
+        if st.button(
+            "Да, удалить", key="confirm_delete_lift", type="primary",
+            icon=":material/delete_forever:", use_container_width=True,
+        ):
+            _delete_group(index)
+            st.session_state.pop("pending_delete_group_index", None)
+            st.rerun()
 
 
 def _render_active_group_form(options: OptionsManager) -> None:
@@ -2643,8 +2711,8 @@ def _handle_group_navigation_event(event: Any) -> None:
         if target is None or target < 0 or target >= st.session_state.group_count:
             return
         if action == "delete":
-            _delete_group(target)
-            _clamp_active_group_selection()
+            _request_delete_group(target)
+            return
         else:
             _copy_group(target, finishes_only=action == "copy_finishes")
         st.rerun()

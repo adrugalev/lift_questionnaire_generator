@@ -1,6 +1,7 @@
 import base64
 import json
 import pytest
+from contextlib import nullcontext
 from io import BytesIO
 
 import app
@@ -37,11 +38,14 @@ def test_context_action_targets_clicked_group_once(monkeypatch, action) -> None:
     app._handle_group_navigation_event(event)
     app._handle_group_navigation_event(event)
     assert len(reruns) == 1
-    assert state.group_drafts[0]["section"] == "A"
     if action == "delete":
-        assert state.group_count == 1
+        assert state.pending_delete_group_index == 1
+        assert state.group_count == 2
         assert state.active_group_index == 0
+        assert state.prefill_groups[0]["section"] == "A"
+        assert state.prefill_groups[1]["section"] == "B"
     else:
+        assert state.group_drafts[0]["section"] == "A"
         assert state.group_count == 3
         assert state.active_group_index == 2
         target = state.group_drafts[2]
@@ -56,6 +60,50 @@ def test_context_action_targets_clicked_group_once(monkeypatch, action) -> None:
         else:
             assert target["capacity_kg"] == 1000
             assert target["section"] == "B"
+
+
+@pytest.mark.parametrize("clicked_button,expected_deletions", [
+    ("cancel_delete_lift", []),
+    ("confirm_delete_lift", [1]),
+])
+def test_delete_dialog_requires_explicit_confirmation(monkeypatch, clicked_button, expected_deletions) -> None:
+    state = FakeSessionState(group_count=2, pending_delete_group_index=1)
+    group = {
+        "lift_name": "Л2", "quantity": 3, "capacity_kg": 630,
+        "section": "Б", "speed_ms": "1.6", "stops": 12,
+    }
+    shown = []
+    deletions = []
+    monkeypatch.setattr(app.st, "session_state", state)
+    monkeypatch.setattr(app, "_group_defaults", lambda index: {})
+    monkeypatch.setattr(app, "_collect_group_from_state", lambda index, defaults: group)
+    monkeypatch.setattr(app, "_delete_group", lambda index: deletions.append(index))
+    monkeypatch.setattr(app.st, "write", lambda value: shown.append(str(value)))
+    monkeypatch.setattr(app.st, "markdown", lambda value: shown.append(str(value)))
+    monkeypatch.setattr(app.st, "caption", lambda value: shown.append(str(value)))
+    monkeypatch.setattr(app.st, "warning", lambda value: shown.append(str(value)))
+    monkeypatch.setattr(app.st, "columns", lambda count: [nullcontext() for _ in range(count)])
+    monkeypatch.setattr(app.st, "button", lambda label, **kwargs: kwargs.get("key") == clicked_button)
+    monkeypatch.setattr(app.st, "rerun", lambda: None)
+
+    app._confirm_delete_group.__wrapped__(1)
+
+    assert deletions == expected_deletions
+    assert "pending_delete_group_index" not in state
+    assert "Вы точно хотите удалить лифт?" in shown
+    assert "**Л2-Л4 (630 кг)**" in shown
+    assert "Б · 3 лифта · Скорость: 1,6 м/с · Остановок: 12" in shown
+    assert "Будет удалена вся группа: 3 лифта." in shown
+
+
+def test_pending_delete_dialog_takes_priority_over_draft_restore(monkeypatch) -> None:
+    state = FakeSessionState(pending_delete_group_index=0, browser_autosave_checked=False)
+    monkeypatch.setattr(app.st, "session_state", state)
+    monkeypatch.setattr(app, "_browser_autosave_loaded_record", lambda: pytest.fail("Restore dialog opened"))
+
+    app._process_browser_autosave_restore()
+
+    assert state.pending_delete_group_index == 0
 
 
 @pytest.mark.parametrize("target", [None, "bad", "-1", "2"])
