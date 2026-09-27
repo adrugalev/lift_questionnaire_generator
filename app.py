@@ -24,6 +24,7 @@ from src.models import LiftGroup, ProjectInfo, Questionnaire
 from src.handrail_wall_picker import HANDRAIL_WALL_PICKER
 from src.materials import AFP_MATERIAL_FIELDS_BY_FLAG, is_stainless_steel_finish
 from src.options_manager import OptionsManager
+from src.shaft_diagram import SHAFT_DIAGRAM_COMPONENT, shaft_diagram_html
 from src.version import app_version_history, app_version_label
 from src.validators import MGN_ACCESSIBILITY_WARNING, ValidationMessage, validate_questionnaire
 
@@ -507,8 +508,8 @@ FIELD_GROUPS = {
         ("shaft_material", "Материал шахты", "select", "shaft_material"),
         ("shaft_width_mm", "Ширина шахты, мм", "number", None),
         ("shaft_depth_mm", "Глубина шахты, мм", "number", None),
-        ("pit_depth_mm", "Глубина приямка, мм", "number", None),
         ("overhead_mm", "Высота верхнего этажа, мм", "number", None),
+        ("pit_depth_mm", "Глубина приямка, мм", "number", None),
         ("room_under_pit", "Наличие помещения под приямком", "select", "yes_no"),
         ("seismic", "Сейсмичность", "select", "seismic"),
     ],
@@ -2492,6 +2493,16 @@ def _render_active_group_form_content(options: OptionsManager) -> None:
                 options, option_key, index, field,
             )
             _render_group_field_grid(content_fields[walls_index + 1:], 2, group, defaults, options, index)
+        elif section == "Шахта":
+            fields_col, drawing_col = st.columns([1.25, 1], gap="medium", vertical_alignment="top")
+            with fields_col:
+                _render_group_field_grid(content_fields, 1, group, defaults, options, index)
+            with drawing_col:
+                SHAFT_DIAGRAM_COMPONENT(
+                    data={"markup": shaft_diagram_html(group)},
+                    key=f"group_{index}_shaft_diagram",
+                    height="content",
+                )
         else:
             has_visual_options = any(option_key in IMAGE_OPTION_DIRS for _, _, _, option_key in content_fields)
             column_count = 2 if has_visual_options else 3 if len(content_fields) >= 8 else 2
