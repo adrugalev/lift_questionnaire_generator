@@ -58,7 +58,9 @@ SHAFT_DIAGRAM_COMPONENT = st.components.v2.component(
 )
 
 _ILLUSTRATION = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "shaft_cutaway.webp"
+_PARKING_ART = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "shaft_with_parking.png"
 _WINCH = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "traction_winch.png"
+_CAR_BRAND = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "epss_car_wordmark.png"
 
 
 @lru_cache(maxsize=1)
@@ -69,6 +71,16 @@ def _illustration_data_url() -> str:
 @lru_cache(maxsize=1)
 def _winch_data_url() -> str:
     return "data:image/png;base64," + b64encode(_WINCH.read_bytes()).decode("ascii")
+
+
+@lru_cache(maxsize=1)
+def _parking_art_data_url() -> str:
+    return "data:image/png;base64," + b64encode(_PARKING_ART.read_bytes()).decode("ascii")
+
+
+@lru_cache(maxsize=1)
+def _car_brand_data_url() -> str:
+    return "data:image/png;base64," + b64encode(_CAR_BRAND.read_bytes()).decode("ascii")
 
 
 def _dimension(value: Any) -> str:
@@ -85,8 +97,49 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
     depth = _dimension(group.get("shaft_depth_mm"))
     pit = _dimension(group.get("pit_depth_mm"))
     overhead = _dimension(group.get("overhead_mm"))
-    illustration = _illustration_data_url()
-    winch = _winch_data_url()
+    has_machine_room = str(group.get("machine_room") or "").strip().casefold() == "с машинным помещением"
+    winch_markup = ""
+    if not has_machine_room:
+        winch_markup = f'<img class="shaft-winch" src="{_winch_data_url()}" alt="" aria-hidden="true">'
+    shaft_description = "Технический разрез лифтовой шахты с кабиной и приямком"
+    if not has_machine_room:
+        shaft_description = "Технический разрез лифтовой шахты с лебёдкой, кабиной и приямком"
+    has_parking = str(group.get("room_under_pit") or "").strip().casefold() in {"да", "yes", "true", "1"}
+    if has_parking:
+        shaft_description += ", под которым расположен паркинг"
+    parking_class = " shaft-card--parking" if has_parking else ""
+    illustration = _parking_art_data_url() if has_parking else _illustration_data_url()
+    car_brand = (
+        f'<image class="shaft-car-brand" href="{_car_brand_data_url()}" width="419" height="137" '
+        'transform="translate(-73 0) scale(1.193) matrix(.15 .088 -.02 .15 457 1352)"/>'
+        if has_parking else ""
+    )
+    overhead_transform = ' transform="translate(0 -17)"' if has_parking else ""
+    pit_transform = ' transform="translate(0 -55)"' if has_parking else ""
+    overhead_top_shift = -8 if has_parking else 0
+    overhead_left_top_y = 94 + overhead_top_shift
+    overhead_back_top_y = 59 + overhead_top_shift
+    overhead_back_top_x = 472 if has_parking else 465
+    overhead_right_top_y = 90 + overhead_top_shift
+    overhead_left_bottom_x = 393 if has_parking else 389
+    overhead_front_bottom_y = 416 if has_parking else 420
+    pit_front_corner_y = 1460 if has_parking else 1478
+    svg_height = 1832 if has_parking else 1536
+    overhead_geometry = (
+        f'<path class="shaft-face shaft-face--left" d="M393 {overhead_left_top_y} {overhead_back_top_x} {overhead_back_top_y} 465 338 {overhead_left_bottom_x} 379Z"/>'
+        f'<path class="shaft-face shaft-face--back" d="M{overhead_back_top_x} {overhead_back_top_y} 623 {overhead_right_top_y} 623 382 465 338Z"/>'
+        f'<path class="shaft-face shaft-face--floor" d="M{overhead_left_bottom_x} 379 465 338 623 382 550 {overhead_front_bottom_y}Z"/>'
+        f'<path class="shaft-region-outline" d="M{overhead_left_bottom_x} 379 393 {overhead_left_top_y} {overhead_back_top_x} {overhead_back_top_y} 623 {overhead_right_top_y}V382"/>'
+        f'<path class="shaft-region-corner" d="M{overhead_back_top_x} {overhead_back_top_y} 465 338M{overhead_left_bottom_x} 379 465 338 623 382 550 {overhead_front_bottom_y} {overhead_left_bottom_x} 379"/>'
+    )
+    overhead_hit = f"M393 {overhead_left_top_y} {overhead_back_top_x} {overhead_back_top_y} 623 {overhead_right_top_y} 623 382 550 {overhead_front_bottom_y} {overhead_left_bottom_x} 379Z"
+    pit_geometry = (
+        '<path class="shaft-face shaft-face--left" d="M372 1249 471 1187 471 1290 372 1353Z"/>'
+        '<path class="shaft-face shaft-face--back" d="M471 1187 670 1285 670 1394 471 1290Z"/>'
+        f'<path class="shaft-face shaft-face--floor" d="M372 1353 471 1290 670 1394 579 {pit_front_corner_y}Z"/>'
+        f'<path class="shaft-region-outline" d="M372 1249 471 1187 670 1285 670 1394 579 {pit_front_corner_y} 372 1353Z"/>'
+    )
+    pit_hit = f"M372 1249 471 1187 670 1285 670 1394 579 {pit_front_corner_y} 372 1353Z"
 
     return f"""
 <style>
@@ -119,6 +172,7 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
     margin-top: 3px;
     isolation: isolate;
   }}
+  .shaft-card--parking .shaft-stage {{aspect-ratio: 1024 / 1832;}}
   .shaft-stage::before {{
     position: absolute;
     inset: 6% 3% 5%;
@@ -129,7 +183,15 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
   .shaft-art {{
     display: block;
     height: auto;
+    position: relative;
     width: 100%;
+    z-index: 1;
+  }}
+  .shaft-card--parking .shaft-art {{
+    position: absolute;
+    left: -7.13%;
+    top: 0;
+    width: 119.3%;
   }}
   .shaft-winch {{
     position: absolute;
@@ -139,13 +201,21 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
     height: auto;
     pointer-events: none;
     filter: saturate(.72) brightness(1.05) drop-shadow(0 3px 4px rgba(31, 58, 83, .25));
+    z-index: 2;
   }}
+  .shaft-card--parking .shaft-winch {{left: 41%; top: 7.55%; width: 18%;}}
   .shaft-measure-arrows {{
     position: absolute;
     inset: 0;
     height: 100%;
     width: 100%;
     overflow: visible;
+    pointer-events: none;
+    z-index: 3;
+  }}
+  .shaft-car-brand {{
+    mix-blend-mode: multiply;
+    opacity: .88;
     pointer-events: none;
   }}
   .shaft-measure-arrows .shaft-hit-area {{
@@ -232,6 +302,7 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
   }}
   .shaft-dim {{
     position: absolute;
+    z-index: 4;
     box-sizing: border-box;
     min-width: 98px;
     max-width: 44%;
@@ -293,6 +364,10 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
   .shaft-dim--overhead {{left: 1%; top: 3%; border-left-color: #139fa4;}}
   .shaft-dim--depth {{right: -1%; top: 54%; border-left-color: #604978;}}
   .shaft-dim--pit {{right: 1%; bottom: 8%; border-left-color: #d99a27;}}
+  .shaft-card--parking .shaft-dim--overhead {{top: 2.5%;}}
+  .shaft-card--parking .shaft-dim--width {{top: 33.5%;}}
+  .shaft-card--parking .shaft-dim--depth {{top: 45.3%;}}
+  .shaft-card--parking .shaft-dim--pit {{top: 66%; bottom: auto;}}
   @media (max-width: 280px) {{
     .shaft-card {{padding: 12px 10px 8px;}}
     .shaft-dim {{min-width: 74px; padding: 5px 6px 4px;}}
@@ -300,27 +375,21 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
     .shaft-dim-value {{font-size: 13px;}}
   }}
 </style>
-<figure class="shaft-card" aria-label="Схема шахты лифта">
+<figure class="shaft-card{parking_class}" aria-label="Схема шахты лифта">
   <figcaption>Шахта в разрезе</figcaption>
   <div class="shaft-caption-note">Схематично · не в масштабе</div>
   <div class="shaft-stage">
-    <img class="shaft-art" src="{illustration}" alt="Технический разрез лифтовой шахты с лебёдкой, кабиной и приямком">
-    <img class="shaft-winch" src="{winch}" alt="" aria-hidden="true">
-    <svg class="shaft-measure-arrows" viewBox="0 0 1024 1536" aria-hidden="true">
+    <img class="shaft-art" src="{illustration}" alt="{shaft_description}">
+    {winch_markup}
+    <svg class="shaft-measure-arrows" viewBox="0 0 1024 {svg_height}" aria-hidden="true">
       <!-- Facets are traced to the perspective edges of shaft_cutaway.webp. -->
-      <g class="shaft-region shaft-region--overhead">
-        <path class="shaft-face shaft-face--left" d="M393 94 465 59 465 338 389 379Z"/>
-        <path class="shaft-face shaft-face--back" d="M465 59 623 90 623 382 465 338Z"/>
-        <path class="shaft-face shaft-face--floor" d="M389 379 465 338 623 382 550 420Z"/>
-        <path class="shaft-region-outline" d="M389 379 393 94 465 59 623 90V382"/>
-        <path class="shaft-region-corner" d="M465 59V338M389 379 465 338 623 382 550 420 389 379"/>
+      <g class="shaft-region shaft-region--overhead"{overhead_transform}>
+        {overhead_geometry}
       </g>
-      <g class="shaft-region shaft-region--pit">
-        <path class="shaft-face shaft-face--left" d="M372 1249 471 1187 471 1290 372 1353Z"/>
-        <path class="shaft-face shaft-face--back" d="M471 1187 670 1285 670 1394 471 1290Z"/>
-        <path class="shaft-face shaft-face--floor" d="M372 1353 471 1290 670 1394 579 1478Z"/>
-        <path class="shaft-region-outline" d="M372 1249 471 1187 670 1285 670 1394 579 1478 372 1353Z"/>
+      <g class="shaft-region shaft-region--pit"{pit_transform}>
+        {pit_geometry}
       </g>
+      {car_brand}
       <defs>
         <marker id="shaft-width-tip" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 12 6 0 12Z" fill="#2468b8" stroke="#fff" stroke-width="1.5"/></marker>
         <marker id="shaft-depth-tip" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 12 6 0 12Z" fill="#604978" stroke="#fff" stroke-width="1.5"/></marker>
@@ -329,8 +398,8 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
       <path class="shaft-arrow-halo shaft-arrow-halo-depth" d="M500 1016 675 916"/>
       <path class="shaft-arrow-width" d="M380 705 618 780" marker-start="url(#shaft-width-tip)" marker-end="url(#shaft-width-tip)"/>
       <path class="shaft-arrow-depth" d="M500 1016 675 916" marker-start="url(#shaft-depth-tip)" marker-end="url(#shaft-depth-tip)"/>
-      <path class="shaft-hit-area" data-shaft-hover="overhead" d="M393 94 465 59 623 90 623 382 550 420 389 379Z"/>
-      <path class="shaft-hit-area" data-shaft-hover="pit" d="M372 1249 471 1187 670 1285 670 1394 579 1478 372 1353Z"/>
+      <path class="shaft-hit-area" data-shaft-hover="overhead" d="{overhead_hit}"{overhead_transform}/>
+      <path class="shaft-hit-area" data-shaft-hover="pit" d="{pit_hit}"{pit_transform}/>
       <path class="shaft-hit-line" data-shaft-hover="width" d="M380 705 618 780"/>
       <path class="shaft-hit-line" data-shaft-hover="depth" d="M500 1016 675 916"/>
     </svg>

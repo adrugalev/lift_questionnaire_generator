@@ -21,7 +21,7 @@ def test_shaft_diagram_shows_only_the_four_relevant_dimensions() -> None:
     ):
         assert f'data-field="{field}"' in html
         assert f'<strong class="shaft-dim-value">{value}</strong>' in html
-    assert "data:image/webp;base64," in html
+    assert "data:image/png;base64," in html
     assert "Машинное помещение" not in html
     assert "Железобетон" not in html
     assert "Сейсмичность" not in html
@@ -39,3 +39,37 @@ def test_shaft_diagram_leaves_unknown_values_blank_and_escapes_input() -> None:
     assert '<strong class="shaft-dim-value">—</strong>' in html
     assert 'data-field="machine_room_height_mm"' not in html
     assert "Без машинного помещения" not in html
+
+
+def test_parking_appears_only_when_room_under_pit_is_present() -> None:
+    with_room = shaft_diagram_html({"room_under_pit": "ДА"})
+    without_room = shaft_diagram_html({"room_under_pit": "НЕТ"})
+
+    assert 'class="shaft-parking"' not in with_room
+    assert '<img class="shaft-art" src="data:image/png;base64,' in with_room
+    assert 'class="shaft-parking"' not in without_room
+    assert 'class="shaft-card shaft-card--parking"' in with_room
+    assert 'class="shaft-card"' in without_room
+    assert 'viewBox="0 0 1024 1832"' in with_room
+    assert 'viewBox="0 0 1024 1536"' in without_room
+    assert '<img class="shaft-art" src="data:image/webp;base64,' in without_room
+    assert with_room.count('class="shaft-art"') == 1
+    assert 'class="shaft-car-brand"' in with_room
+    assert 'class="shaft-car-brand"' not in without_room
+
+
+def test_winch_is_hidden_with_machine_room_in_both_shaft_variants() -> None:
+    for parking_choice in ("ДА", "НЕТ"):
+        with_machine_room = shaft_diagram_html({
+            "machine_room": "С машинным помещением",
+            "room_under_pit": parking_choice,
+        })
+        without_machine_room = shaft_diagram_html({
+            "machine_room": "Без машинного помещения",
+            "room_under_pit": parking_choice,
+        })
+
+        assert '<img class="shaft-winch"' not in with_machine_room
+        assert "с лебёдкой" not in with_machine_room
+        assert '<img class="shaft-winch"' in without_machine_room
+        assert "с лебёдкой" in without_machine_room

@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from src.additional_options import ADDITIONAL_OPTION_FIELDS, ADDITIONAL_OPTION_TRANSLATIONS
 from src.excel_generator import ExcelGenerationError, generate_questionnaire_xlsx
+from src.enter_field_navigation import ENTER_FIELD_NAVIGATION_COMPONENT
 from src.file_utils import safe_filename
 from src.models import LiftGroup, ProjectInfo, Questionnaire
 from src.handrail_wall_picker import HANDRAIL_WALL_PICKER
@@ -734,6 +735,7 @@ def _apply_random_additional_options(group: dict[str, Any]) -> None:
 def main() -> None:
     st.set_page_config(page_title="Генератор опросных листов EPSS", layout="wide")
     _inject_filled_field_styles()
+    ENTER_FIELD_NAVIGATION_COMPONENT(key="enter_field_navigation")
     options = _options_manager()
     _init_state()
     _apply_pending_draft_restore()
@@ -1420,8 +1422,9 @@ def _filled_field_styles_css() -> str:
 
         .project-summary-name {
             color: #6b7280;
-            font-size: 0.78rem;
-            line-height: 1.25;
+            font-size: 0.76rem;
+            font-weight: 600;
+            line-height: 1.2;
             margin-bottom: 0.75rem;
             overflow-wrap: anywhere;
         }
@@ -1450,10 +1453,10 @@ def _filled_field_styles_css() -> str:
 
         .project-summary-subset-label {
             color: #6b7280;
-            font-size: 0.76rem;
-            font-weight: 600;
+            font-size: 0.78rem;
+            font-weight: 400;
             grid-column: 1 / -1;
-            line-height: 1.2;
+            line-height: 1.25;
         }
 
         .project-summary-metric--subset {
