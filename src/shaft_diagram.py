@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from base64 import b64encode
-from functools import lru_cache
 from html import escape
-from pathlib import Path
 from typing import Any, Mapping
 
 import streamlit as st
@@ -57,30 +54,10 @@ SHAFT_DIAGRAM_COMPONENT = st.components.v2.component(
     """,
 )
 
-_ILLUSTRATION = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "shaft_cutaway.webp"
-_PARKING_ART = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "shaft_with_parking.png"
-_WINCH = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "traction_winch.png"
-_CAR_BRAND = Path(__file__).resolve().parents[1] / "templates" / "Shaft_photo" / "epss_car_wordmark.png"
-
-
-@lru_cache(maxsize=1)
-def _illustration_data_url() -> str:
-    return "data:image/webp;base64," + b64encode(_ILLUSTRATION.read_bytes()).decode("ascii")
-
-
-@lru_cache(maxsize=1)
-def _winch_data_url() -> str:
-    return "data:image/png;base64," + b64encode(_WINCH.read_bytes()).decode("ascii")
-
-
-@lru_cache(maxsize=1)
-def _parking_art_data_url() -> str:
-    return "data:image/png;base64," + b64encode(_PARKING_ART.read_bytes()).decode("ascii")
-
-
-@lru_cache(maxsize=1)
-def _car_brand_data_url() -> str:
-    return "data:image/png;base64," + b64encode(_CAR_BRAND.read_bytes()).decode("ascii")
+_ILLUSTRATION_URL = "app/static/shaft_cutaway.webp"
+_PARKING_ART_URL = "app/static/shaft_with_parking.webp"
+_WINCH_URL = "app/static/traction_winch.webp"
+_CAR_BRAND_URL = "app/static/epss_car_wordmark.webp"
 
 
 def _dimension(value: Any) -> str:
@@ -100,7 +77,7 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
     has_machine_room = str(group.get("machine_room") or "").strip().casefold() == "с машинным помещением"
     winch_markup = ""
     if not has_machine_room:
-        winch_markup = f'<img class="shaft-winch" src="{_winch_data_url()}" alt="" aria-hidden="true">'
+        winch_markup = f'<img class="shaft-winch" src="{_WINCH_URL}" alt="" aria-hidden="true">'
     shaft_description = "Технический разрез лифтовой шахты с кабиной и приямком"
     if not has_machine_room:
         shaft_description = "Технический разрез лифтовой шахты с лебёдкой, кабиной и приямком"
@@ -108,9 +85,9 @@ def shaft_diagram_html(group: Mapping[str, Any]) -> str:
     if has_parking:
         shaft_description += ", под которым расположен паркинг"
     parking_class = " shaft-card--parking" if has_parking else ""
-    illustration = _parking_art_data_url() if has_parking else _illustration_data_url()
+    illustration = _PARKING_ART_URL if has_parking else _ILLUSTRATION_URL
     car_brand = (
-        f'<image class="shaft-car-brand" href="{_car_brand_data_url()}" width="419" height="137" '
+        f'<image class="shaft-car-brand" href="{_CAR_BRAND_URL}" width="419" height="137" '
         'transform="translate(-73 0) scale(1.193) matrix(.15 .088 -.02 .15 457 1352)"/>'
         if has_parking else ""
     )
