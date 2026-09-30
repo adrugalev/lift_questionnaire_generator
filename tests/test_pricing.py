@@ -160,7 +160,7 @@ def test_sidebar_formats_unit_prices_in_supplied_placeholder(monkeypatch):
     })
     app._render_project_summary_sidebar(Placeholder())
     assert len(rendered) == 1
-    assert "~ 63 000¥" in rendered[0]
+    assert "~ 63 000 ¥" in rendered[0]
     assert "Предварительно за 1 лифт" not in rendered[0]
     assert 'title="Предварительная заводская цена за один лифт.' in rendered[0]
     assert "&quot;30.09.2026&quot;" in rendered[0]

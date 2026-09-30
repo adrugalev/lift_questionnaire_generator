@@ -1693,7 +1693,7 @@ def _render_project_summary_sidebar(summary_placeholder=None) -> None:
         price_html = ""
         if index < len(price_rows):
             row = price_rows[index]
-            price_label = f'~ {row["cny"]:,}'.replace(",", " ") + "¥" if row["cny"] is not None else "—"
+            price_label = f'~ {row["cny"]:,}'.replace(",", " ") + " ¥" if row["cny"] is not None else "—"
             price_html = (
                 f'<span class="project-summary-price" title="{html.escape(row["note"], quote=True)}">'
                 f'{price_label}</span>'
