@@ -156,12 +156,13 @@ def test_sidebar_formats_unit_prices_in_supplied_placeholder(monkeypatch):
     monkeypatch.setattr(app, "_project_summary_from_state", lambda: {
         "project_name": "Объект", "lift_count": 2, "firefighter_lift_count": 0, "mgn_lift_count": 0,
         "lift_breakdown": ["2 лифта — 1,6 м/с, 1000 кг, 7 ост."],
-        "lift_prices": [{"cny": 63000, "note": 'Прайс "30.09.2026"'}],
+        "lift_prices": [{"cny": 63000, "note": 'Предварительная заводская цена за один лифт. Прайс от "30.09.2026".'}],
     })
     app._render_project_summary_sidebar(Placeholder())
     assert len(rendered) == 1
     assert "~ 63 000¥" in rendered[0]
-    assert "Предварительно за 1 лифт, CNY" in rendered[0]
+    assert "Предварительно за 1 лифт" not in rendered[0]
+    assert 'title="Предварительная заводская цена за один лифт.' in rendered[0]
     assert "&quot;30.09.2026&quot;" in rendered[0]
 
 

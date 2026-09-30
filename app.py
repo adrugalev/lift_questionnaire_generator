@@ -1702,8 +1702,6 @@ def _render_project_summary_sidebar(summary_placeholder=None) -> None:
             f'<div class="project-summary-breakdown-line"><span>{html.escape(line)}</span>{price_html}</div>'
         )
     lift_breakdown = "".join(breakdown_lines)
-    if price_rows:
-        lift_breakdown += '<div class="project-summary-price-note">Предварительно за 1 лифт, CNY</div>'
     if summary.get("price_error"):
         lift_breakdown += (
             f'<div class="project-summary-price-note" title="{html.escape(summary["price_error"], quote=True)}">'
