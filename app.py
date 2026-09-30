@@ -25,6 +25,7 @@ from src.models import LiftGroup, ProjectInfo, Questionnaire
 from src.handrail_wall_picker import HANDRAIL_WALL_PICKER
 from src.materials import AFP_MATERIAL_FIELDS_BY_FLAG, is_stainless_steel_finish
 from src.options_manager import OptionsManager
+from src.pricing import PRICING_GROUP_FIELDS, PriceCatalog, PriceCatalogError
 from src.shaft_diagram import SHAFT_DIAGRAM_COMPONENT, shaft_diagram_html
 from src.version import app_version_history, app_version_label
 from src.validators import MGN_ACCESSIBILITY_WARNING, ValidationMessage, validate_questionnaire
@@ -96,6 +97,7 @@ BROWSER_DRAFT_STORAGE_COMPONENT = st.components.v2.component(
 DEFAULT_TEMPLATE = ROOT / "templates" / "questionnaire_template.xlsx"
 MAPPING_PATH = ROOT / "data" / "excel_mapping.json"
 OPTIONS_PATH = ROOT / "data" / "options.json"
+PRICE_CATALOG_PATH = ROOT / "data" / "epss_price_catalog.json"
 DRAFT_FILE_KIND = "epss_lift_questionnaire_draft"
 DRAFT_SCHEMA_VERSION = 1
 LIFT_TEAM_SURNAMES = (
@@ -743,10 +745,12 @@ def main() -> None:
     _render_app_header(options)
 
     _render_lift_team_sidebar()
-    _render_project_summary_sidebar()
+    st.sidebar.markdown('<div class="sidebar-block-gap"></div>', unsafe_allow_html=True)
+    summary_placeholder = st.sidebar.empty()
+    _render_project_summary_sidebar(summary_placeholder)
 
     project_data = _project_block()
-    group_data = _groups_block(options)
+    group_data = _groups_block(options, summary_placeholder)
     _draft_sidebar(project_data, group_data)
     _sync_browser_autosave(project_data, group_data)
 
@@ -765,6 +769,23 @@ def _options_manager() -> OptionsManager:
 def _cached_options_manager(path: str, modified_ns: int) -> OptionsManager:
     del modified_ns
     return OptionsManager(path)
+
+
+def _price_catalog() -> PriceCatalog | None:
+    try:
+        modified_ns = PRICE_CATALOG_PATH.stat().st_mtime_ns
+        catalog = _cached_price_catalog(str(PRICE_CATALOG_PATH), modified_ns)
+    except (OSError, PriceCatalogError) as error:
+        st.session_state.price_catalog_error = str(error)
+        return None
+    st.session_state.pop("price_catalog_error", None)
+    return catalog
+
+
+@st.cache_resource(show_spinner=False)
+def _cached_price_catalog(path: str, modified_ns: int) -> PriceCatalog:
+    del modified_ns
+    return PriceCatalog.from_bytes(Path(path).read_bytes())
 
 
 def _inject_filled_field_styles() -> None:
@@ -1500,6 +1521,26 @@ def _filled_field_styles_css() -> str:
             margin-top: 0.28rem;
         }
 
+        .project-summary-breakdown-line {
+            align-items: start;
+            display: grid;
+            gap: 0.5rem;
+            grid-template-columns: minmax(0, 1fr) auto;
+        }
+
+        .project-summary-price {
+            color: #23784a;
+            font-size: 0.72rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .project-summary-price-note {
+            color: #7b8492;
+            font-size: 0.64rem;
+            margin-top: 0.5rem;
+        }
+
         .lift-team-sidebar-label {
             margin-bottom: 0;
         }
@@ -1643,18 +1684,38 @@ def _init_state() -> None:
     st.session_state.setdefault("browser_autosave_clear_revision", 0)
 
 
-def _render_project_summary_sidebar() -> None:
+def _render_project_summary_sidebar(summary_placeholder=None) -> None:
     summary = _project_summary_from_state()
     project_name = html.escape(summary["project_name"] or "Название проекта не указано")
-    lift_breakdown = "".join(
-        f'<div class="project-summary-breakdown-line">{html.escape(line)}</div>'
-        for line in summary["lift_breakdown"]
-    )
+    price_rows = summary.get("lift_prices", [])
+    breakdown_lines: list[str] = []
+    for index, line in enumerate(summary["lift_breakdown"]):
+        price_html = ""
+        if index < len(price_rows):
+            row = price_rows[index]
+            price_label = f'~ {row["cny"]:,}'.replace(",", " ") + "¥" if row["cny"] is not None else "—"
+            price_html = (
+                f'<span class="project-summary-price" title="{html.escape(row["note"], quote=True)}">'
+                f'{price_label}</span>'
+            )
+        breakdown_lines.append(
+            f'<div class="project-summary-breakdown-line"><span>{html.escape(line)}</span>{price_html}</div>'
+        )
+    lift_breakdown = "".join(breakdown_lines)
+    if price_rows:
+        lift_breakdown += '<div class="project-summary-price-note">Предварительно за 1 лифт, CNY</div>'
+    if summary.get("price_error"):
+        lift_breakdown += (
+            f'<div class="project-summary-price-note" title="{html.escape(summary["price_error"], quote=True)}">'
+            'Прайс недоступен</div>'
+        )
     lift_breakdown_block = (
         f'<div class="project-summary-breakdown">{lift_breakdown}</div>' if lift_breakdown else ""
     )
-    st.sidebar.markdown('<div class="sidebar-block-gap"></div>', unsafe_allow_html=True)
-    st.sidebar.markdown(
+    if summary_placeholder is None:
+        st.sidebar.markdown('<div class="sidebar-block-gap"></div>', unsafe_allow_html=True)
+    target = summary_placeholder if summary_placeholder is not None else st.sidebar
+    target.markdown(
         f"""
         <div class="project-summary-card">
             <div class="project-summary-title">Кратко о проекте</div>
@@ -2182,26 +2243,36 @@ def _project_summary_from_state() -> dict[str, Any]:
             firefighter_lift_count += group_lift_count
         if _truthy_yes_no(mgn_accessibility):
             mgn_lift_count += group_lift_count
-        groups.append({
-            "quantity": quantity,
-            "speed_ms": st.session_state.get(f"group_{index}_speed_ms", defaults.get("speed_ms")),
-            "capacity_kg": st.session_state.get(
-                f"group_{index}_capacity_kg", defaults.get("capacity_kg")
-            ),
-            "stops": st.session_state.get(f"group_{index}_stops", defaults.get("stops")),
-        })
+        group = dict(defaults)
+        group["quantity"] = quantity
+        for field in PRICING_GROUP_FIELDS:
+            key = f"group_{index}_{field}"
+            if key in st.session_state:
+                value = st.session_state[key]
+                if value == OTHER_OPTION:
+                    value = st.session_state.get(f"{key}_custom")
+                group[field] = value
+        groups.append(group)
+    catalog = _price_catalog()
+    rows = _lift_summary_rows(groups, catalog)
     return {
         "project_name": project_name,
         "group_count": group_count,
         "lift_count": lift_count,
         "firefighter_lift_count": firefighter_lift_count,
         "mgn_lift_count": mgn_lift_count,
-        "lift_breakdown": _lift_summary_breakdown(groups),
+        "lift_breakdown": [row["label"] for row in rows],
+        "lift_prices": [{"cny": row["cny"], "note": row["note"]} for row in rows] if catalog else [],
+        "price_error": st.session_state.get("price_catalog_error", ""),
     }
 
 
 def _lift_summary_breakdown(groups: list[dict[str, Any]]) -> list[str]:
-    quantities_by_spec: dict[tuple[str, int | None, int | None], int] = {}
+    return [row["label"] for row in _lift_summary_rows(groups)]
+
+
+def _lift_summary_rows(groups: list[dict[str, Any]], catalog: PriceCatalog | None = None) -> list[dict[str, Any]]:
+    quantities_by_spec: dict[tuple[Any, ...], int] = {}
     for group in groups:
         quantity = _parse_positive_int_silent(group.get("quantity"))
         if quantity is None:
@@ -2211,11 +2282,12 @@ def _lift_summary_breakdown(groups: list[dict[str, Any]]) -> list[str]:
         stops = _parse_positive_int_silent(group.get("stops"))
         if not any((speed, capacity, stops)):
             continue
-        spec = (speed, capacity, stops)
+        inputs = catalog.inputs_for_group(group) if catalog else ()
+        spec = (speed, capacity, stops, inputs)
         quantities_by_spec[spec] = quantities_by_spec.get(spec, 0) + quantity
 
-    lines: list[str] = []
-    for (speed, capacity, stops), quantity in quantities_by_spec.items():
+    rows: list[dict[str, Any]] = []
+    for (speed, capacity, stops, inputs), quantity in quantities_by_spec.items():
         details: list[str] = []
         if speed:
             details.append(f"{speed} м/с")
@@ -2224,8 +2296,19 @@ def _lift_summary_breakdown(groups: list[dict[str, Any]]) -> list[str]:
         if stops is not None:
             details.append(f"{stops} ост.")
         quantity_text = f"{quantity} {_lift_noun(quantity)}"
-        lines.append(f"{quantity_text} — {', '.join(details)}")
-    return lines
+        estimate = catalog.estimate_inputs(inputs) if catalog else None
+        note = ""
+        if catalog:
+            if estimate is None:
+                note = "Для оценки нужны числовые значения: " + ", ".join(catalog.missing_fields(inputs))
+            else:
+                note = f"Предварительная заводская цена за один лифт. Прайс от {catalog.source_date}."
+        rows.append({
+            "label": f"{quantity_text} — {', '.join(details)}",
+            "cny": estimate.cny if estimate else None,
+            "note": note,
+        })
+    return rows
 
 
 def _lift_noun(quantity: int) -> str:
@@ -2304,7 +2387,7 @@ def _project_block() -> dict[str, Any]:
     }
 
 
-def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
+def _groups_block(options: OptionsManager, summary_placeholder=None) -> list[dict[str, Any]]:
     _normalize_group_lists()
     _sync_group_lift_name_ranges_before_render()
     _clamp_active_group_selection()
@@ -2354,7 +2437,7 @@ def _groups_block(options: OptionsManager) -> list[dict[str, Any]]:
     if group_sync_notice:
         st.success(group_sync_notice)
 
-    _render_active_group_form(options)
+    _render_active_group_form(options, summary_placeholder)
     return nav_groups
 
 
@@ -2415,7 +2498,7 @@ def _confirm_delete_group(index: int) -> None:
             st.rerun()
 
 
-def _render_active_group_form(options: OptionsManager) -> None:
+def _render_active_group_form(options: OptionsManager, summary_placeholder=None) -> None:
     index = int(st.session_state.active_group_index)
     active_section_key = f"group_{index}_active_section"
     section_names = list(FIELD_GROUPS.keys())
@@ -2425,20 +2508,20 @@ def _render_active_group_form(options: OptionsManager) -> None:
     )
     if active_section == section_names[0]:
         st.session_state.pop("group_field_app_refresh_requested", None)
-        _render_active_group_form_content(options)
+        _render_active_group_form_content(options, summary_placeholder)
         return
-    _render_active_group_form_fragment(options)
+    _render_active_group_form_fragment(options, summary_placeholder)
 
 
 @st.fragment
-def _render_active_group_form_fragment(options: OptionsManager) -> None:
+def _render_active_group_form_fragment(options: OptionsManager, summary_placeholder=None) -> None:
     if st.session_state.pop("group_field_app_refresh_requested", False):
         st.rerun(scope="app")
 
-    _render_active_group_form_content(options)
+    _render_active_group_form_content(options, summary_placeholder)
 
 
-def _render_active_group_form_content(options: OptionsManager) -> None:
+def _render_active_group_form_content(options: OptionsManager, summary_placeholder=None) -> None:
 
     index = int(st.session_state.active_group_index)
     defaults = _group_defaults(index)
@@ -2520,6 +2603,8 @@ def _render_active_group_form_content(options: OptionsManager) -> None:
         if afp_fields and section != "Сигнализация":
             st.markdown('<div class="section-fields-spacer"></div>', unsafe_allow_html=True)
             _render_group_field_grid(afp_fields, 1, group, defaults, options, index)
+    if summary_placeholder is not None:
+        _render_project_summary_sidebar(summary_placeholder)
 
 
 def _section_fields_for_group(

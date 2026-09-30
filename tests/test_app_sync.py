@@ -1170,6 +1170,8 @@ def test_project_summary_uses_live_group_quantities(monkeypatch) -> None:
         "firefighter_lift_count": 0,
         "mgn_lift_count": 0,
         "lift_breakdown": [],
+        "lift_prices": [],
+        "price_error": "",
     }
 
 
@@ -2155,8 +2157,8 @@ def test_basic_section_uses_full_app_render_for_live_summary(monkeypatch) -> Non
     })
     calls = []
     monkeypatch.setattr(app.st, "session_state", session_state)
-    monkeypatch.setattr(app, "_render_active_group_form_content", lambda _options: calls.append("app"))
-    monkeypatch.setattr(app, "_render_active_group_form_fragment", lambda _options: calls.append("fragment"))
+    monkeypatch.setattr(app, "_render_active_group_form_content", lambda _options, _summary=None: calls.append("app"))
+    monkeypatch.setattr(app, "_render_active_group_form_fragment", lambda _options, _summary=None: calls.append("fragment"))
 
     app._render_active_group_form(object())
 

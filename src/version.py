@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-APP_VERSION_DATE = "27.09.2026"
+APP_VERSION_DATE = "30.09.2026"
 # Дневной счетчик версии: при смене APP_VERSION_DATE начинается с 1.
-APP_VERSION_REVISION = 33
+APP_VERSION_REVISION = 1
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,15 @@ class VersionHistoryEntry:
 
 
 APP_VERSION_HISTORY = (
+    VersionHistoryEntry(
+        revision=1,
+        date="30.09.2026",
+        changes=(
+            "В блоке «Кратко о проекте» добавлена предварительная стоимость конфигурации в юанях за один лифт по модели EPSS.",
+            "Цена обновляется при изменении параметров и учитываемых опций; конфигурации с разной расчётной комплектацией показаны отдельно.",
+            "Прайс поставляется вместе с версией приложения и обновляется при выпуске новой версии, без кнопки загрузки в интерфейсе.",
+        ),
+    ),
     VersionHistoryEntry(
         revision=33,
         date="27.09.2026",
